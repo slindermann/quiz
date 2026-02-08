@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Z-Quiz Presenter</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="presenter-body">
+
+  <div class="presenter-header">
+    <div style="display:flex;flex-direction:column;align-items:flex-start">
+      <img id="presLogo" class="logo-img hidden" src="/uploads/logo.png" alt="Logo"
+           onerror="this.classList.add('hidden')">
+      <span id="presQuizName" style="font-size:1.2rem;font-weight:700"></span>
+    </div>
+    <div class="player-count">
+      <span class="player-dot"></span>
+      <span id="presPlayerNum">0</span> Players
+    </div>
+  </div>
+
+  <div class="presenter-content">
+
+    <!-- Waiting -->
+    <div id="presWaiting" class="presenter-waiting">
+      <div style="display:flex;align-items:flex-start;gap:40px;flex-wrap:wrap;justify-content:center;width:100%;max-width:1000px">
+        <div style="flex:1;min-width:300px;text-align:center">
+          <h2 data-i18n="waitingTitle">Get Ready!</h2>
+          <p data-i18n="waitingText">Waiting for the next question...</p>
+          <div class="player-count mt-3" style="font-size:1.5rem;background:rgba(255,255,255,0.1);padding:12px 24px;display:inline-flex">
+            <span class="player-dot"></span>
+            <span id="presWaitPlayerNum">0</span> <span data-i18n="players">Players</span>
+          </div>
+          <div id="presPlayerNames" class="presenter-player-names mt-3"></div>
+        </div>
+        <div id="presQRCode" style="flex-shrink:0"></div>
+      </div>
+    </div>
+
+    <!-- Question (text only) -->
+    <div id="presQuestion" class="presenter-question hidden">
+      <h2 id="presQuestionText"></h2>
+      <div id="presReadPrompt" class="mt-3" style="font-size:1.3rem;opacity:0.6" data-i18n="readQuestion">Read the question...</div>
+    </div>
+
+    <!-- Question with answers -->
+    <div id="presAnswers" class="hidden" style="width:100%;max-width:900px">
+      <h2 id="presQuestionText2" style="text-align:center;font-size:2rem;margin-bottom:20px"></h2>
+      <div class="presenter-timer" id="presTimer">--</div>
+      <div class="timer-bar mt-2" style="height:12px">
+        <div class="timer-bar-fill" id="presTimerBar" style="width:100%"></div>
+      </div>
+      <div class="presenter-answers mt-3" id="presAnswersGrid"></div>
+      <div class="text-center mt-2" style="font-size:1.1rem;opacity:0.7">
+        <span id="presAnswerCount">0</span> <span data-i18n="answersIn">answers in</span>
+      </div>
+    </div>
+
+    <!-- Question closed (results) -->
+    <div id="presClosed" class="hidden" style="width:100%;max-width:900px">
+      <h2 id="presClosedQuestion" style="text-align:center;font-size:1.8rem;margin-bottom:20px"></h2>
+      <div class="presenter-answers" id="presClosedAnswers"></div>
+      <div class="presenter-stats mt-3" id="presClosedStats" style="margin:20px auto"></div>
+    </div>
+
+    <!-- Leaderboard -->
+    <div id="presLeaderboard" class="presenter-leaderboard hidden">
+      <h2 id="presLeaderboardTitle" style="text-align:center;font-size:2.5rem;margin-bottom:20px" data-i18n="leaderboard">Leaderboard</h2>
+      <div id="presLeaderboardList" class="leaderboard"></div>
+    </div>
+
+    <!-- Finale -->
+    <div id="presFinale" class="hidden" style="width:100%">
+      <h2 style="text-align:center;font-size:3rem;margin-bottom:30px" data-i18n="finale">Finale</h2>
+      <div class="podium" id="presPodium">
+        <div class="podium-place second" id="presPodium2">
+          <div class="podium-avatar" style="background:var(--zs-silver)">2</div>
+          <div class="podium-name" id="presPodium2Name">---</div>
+          <div class="podium-score" id="presPodium2Score">0</div>
+          <div class="podium-bar">2</div>
+        </div>
+        <div class="podium-place first" id="presPodium1">
+          <div class="podium-avatar" style="background:var(--zs-gold)">1</div>
+          <div class="podium-name" id="presPodium1Name">---</div>
+          <div class="podium-score" id="presPodium1Score">0</div>
+          <div class="podium-bar">1</div>
+        </div>
+        <div class="podium-place third" id="presPodium3">
+          <div class="podium-avatar" style="background:var(--zs-bronze)">3</div>
+          <div class="podium-name" id="presPodium3Name">---</div>
+          <div class="podium-score" id="presPodium3Score">0</div>
+          <div class="podium-bar">3</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <canvas id="confetti-canvas"></canvas>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/i18n.js"></script>
+  <script src="/js/presenter.js"></script>
+</body>
+</html>

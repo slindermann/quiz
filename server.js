@@ -1,0 +1,59 @@
+require('dotenv').config();
+
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const cookieParser = require('cookie-parser');
+const path = require('path');
+const db = require('./db/database');
+
+async function start() {
+  // Initialize database (async for sql.js)
+  await db.init();
+
+  const app = express();
+  const server = http.createServer(app);
+  const io = new Server(server);
+
+  // Middleware
+  app.use(express.json());
+  app.use(cookieParser());
+  app.use(express.static(path.join(__dirname, 'public')));
+  app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+  // Routes
+  const adminRoutes = require('./routes/admin');
+  const apiRoutes = require('./routes/api');
+
+  app.use('/admin/api', adminRoutes);
+  app.use('/api', apiRoutes);
+
+  // Join URL redirect
+  app.get('/join/:code', (req, res) => {
+    res.redirect(`/?quiz=${req.params.code}`);
+  });
+
+  // Socket.IO
+  const setupSockets = require('./sockets/index');
+  const { answersVisibleAt } = setupSockets(io);
+
+  // Make io and shared state accessible to routes
+  app.set('io', io);
+  app.set('answersVisibleAt', answersVisibleAt);
+
+  const PORT = process.env.PORT || 3000;
+  server.listen(PORT, () => {
+    const admin = db.getAdminByUsername(process.env.ADMIN_USER || 'admin');
+    console.log(`\n  Z-Quiz server running on http://localhost:${PORT}`);
+    if (admin) {
+      console.log(`  Join URL: http://localhost:${PORT}/join/${admin.quiz_code}`);
+      console.log(`  Admin:    http://localhost:${PORT}/admin.html`);
+      console.log(`  Presenter: http://localhost:${PORT}/presenter.html?quiz=${admin.quiz_code}\n`);
+    }
+  });
+}
+
+start().catch(err => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
+});

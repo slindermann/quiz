@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Z-Quiz Admin</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- Login Overlay -->
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-box">
+      <h2>Admin Login</h2>
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="loginUser" class="form-control" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="loginPass" class="form-control" autocomplete="current-password">
+      </div>
+      <button class="btn btn-primary btn-block" id="loginBtn">Login</button>
+      <p id="loginError" class="text-center text-sm mt-1" style="color:var(--zs-red)"></p>
+    </div>
+  </div>
+
+  <!-- Admin Dashboard -->
+  <div class="hidden" id="dashboard">
+    <div class="header">
+      <h1 data-i18n="adminTitle">Admin Dashboard</h1>
+      <div class="subtitle" id="adminQuizName"></div>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;flex-wrap:wrap">
+        <div class="player-count" id="adminPlayerCount">
+          <span class="player-dot"></span>
+          <span id="adminPlayerNum">0</span> <span data-i18n="players">Players</span>
+        </div>
+        <div class="badge" id="adminStatus">idle</div>
+      </div>
+    </div>
+
+    <div class="container-wide">
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab active" data-tab="game" data-i18n="gameControl">Game Control</button>
+        <button class="tab" data-tab="content" data-i18n="questions">Questions</button>
+        <button class="tab" data-tab="settings" data-i18n="settings">Settings</button>
+      </div>
+
+      <!-- Tab: Game Control -->
+      <div class="tab-content active" id="tab-game">
+        <div class="admin-grid">
+          <div>
+            <!-- Categories -->
+            <div class="card">
+              <div class="card-header">
+                <h2 data-i18n="categories">Categories</h2>
+              </div>
+              <div id="seedExamplesBox" class="hidden" style="padding:16px;text-align:center;border:2px dashed var(--zs-gray);border-radius:8px;margin-bottom:12px">
+                <p class="text-muted text-sm mb-1">Noch keine Fragen vorhanden.</p>
+                <button class="btn btn-outline btn-sm" id="btnSeedExamples" title="Laedt 10 Zscaler-Beispielfragen in 5 Kategorien">Beispielfragen laden</button>
+              </div>
+              <div id="gameCategoryList"></div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="card">
+              <h2 class="mb-2">Actions</h2>
+              <div class="btn-group" style="flex-wrap:wrap">
+                <button class="btn btn-outline btn-sm" id="btnShowLeaderboard" title="Zeigt die kumulative Gesamt-Bestenliste auf allen Bildschirmen an">Overall Leaderboard</button>
+                <button class="btn btn-outline btn-sm" id="btnGoIdle" title="Schaltet alle Bildschirme auf den Wartebildschirm">Waiting Screen</button>
+                <button class="btn btn-gold btn-sm" id="btnStartFinale" title="Startet die feierliche Top-3 Enthuellung">Finale</button>
+                <button class="btn btn-danger btn-sm" id="btnResetQuiz" title="Generiert einen neuen Quiz-Code und loescht alle Spieler und Antworten">Neues Quiz</button>
+              </div>
+            </div>
+
+            <!-- Finale Control -->
+            <div class="card hidden" id="finaleControl">
+              <h2 class="mb-2" data-i18n="finale">Finale</h2>
+              <div class="btn-group">
+                <button class="btn btn-primary" id="btnReveal3" title="Enthuellt den 3. Platz">Reveal 3rd</button>
+                <button class="btn btn-primary" id="btnReveal2" title="Enthuellt den 2. Platz">Reveal 2nd</button>
+                <button class="btn btn-gold" id="btnReveal1" title="Enthuellt den 1. Platz">Reveal 1st</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="admin-sidebar">
+            <!-- Live Status -->
+            <div class="card">
+              <h2 class="mb-1">Live</h2>
+              <div id="liveQuestion" class="text-muted text-sm">No active question</div>
+              <div id="liveAnswerCount" class="mt-1 text-sm"></div>
+              <div class="btn-group mt-2">
+                <button class="btn btn-danger btn-sm hidden" id="btnCloseQuestion" title="Schliesst die aktuelle Frage vorzeitig und zeigt die richtige Antwort">Close Question</button>
+              </div>
+            </div>
+
+            <!-- QR Code -->
+            <div class="card">
+              <div class="card-header">
+                <h2 data-i18n="qrCode">QR Code</h2>
+              </div>
+              <div class="qr-container" id="qrContainer">
+                <button class="btn btn-outline btn-sm" id="btnGenQR">Generate QR Code</button>
+              </div>
+            </div>
+
+            <!-- Presenter -->
+            <div class="card">
+              <h2 class="mb-1">Presenter</h2>
+              <button class="btn btn-primary btn-sm" id="btnOpenPresenter" title="Oeffnet die Beamer-Ansicht in einem neuen Tab">Open Presenter View</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Questions Management -->
+      <div class="tab-content" id="tab-content">
+        <div class="admin-grid">
+          <div>
+            <div class="card">
+              <div class="card-header">
+                <h2 data-i18n="categories">Categories</h2>
+                <button class="btn btn-primary btn-sm" id="btnAddCategory" data-i18n="addCategory">Add Category</button>
+              </div>
+              <div id="categoryList"></div>
+            </div>
+          </div>
+          <div>
+            <div class="card">
+              <div class="card-header">
+                <h2 data-i18n="questions">Questions</h2>
+                <button class="btn btn-primary btn-sm" id="btnAddQuestion" data-i18n="addQuestion">Add Question</button>
+              </div>
+              <div id="questionList">
+                <p class="text-muted text-sm">Select a category</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Settings -->
+      <div class="tab-content" id="tab-settings">
+        <div class="card" style="max-width:500px">
+          <h2 class="mb-2" data-i18n="settings">Settings</h2>
+          <div class="form-group">
+            <label data-i18n="quizName">Quiz Name</label>
+            <input type="text" id="settingQuizName" class="form-control">
+          </div>
+          <div class="form-group">
+            <label data-i18n="language">Language</label>
+            <select id="settingLanguage" class="form-control">
+              <option value="en">English</option>
+              <option value="de">Deutsch</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label data-i18n="answerDelay">Answer Delay (s)</label>
+            <input type="number" id="settingDelay" class="form-control" min="0" max="30" value="3">
+          </div>
+          <button class="btn btn-primary" id="btnSaveSettings" data-i18n="save">Save</button>
+
+          <hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0">
+
+          <h3 class="mb-1" data-i18n="uploadLogo">Upload Logo</h3>
+          <div id="logoPreview" class="mb-1" style="display:none">
+            <img id="logoPreviewImg" class="logo-img" alt="Current Logo">
+          </div>
+          <div class="form-group">
+            <input type="file" id="logoFile" accept="image/*">
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-outline btn-sm" id="btnUploadLogo" data-i18n="uploadLogo">Upload Logo</button>
+            <button class="btn btn-danger btn-sm" id="btnDeleteLogo" title="Logo loeschen">Delete Logo</button>
+          </div>
+
+          <hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0">
+
+          <h3 class="mb-2">Import / Export</h3>
+
+          <h4 class="text-sm text-muted mb-1">Spieler-Ergebnisse exportieren</h4>
+          <div class="btn-group mb-2">
+            <button class="btn btn-outline btn-sm" id="btnExport" title="Exportiert alle Spielerantworten mit Punkten und Zeiten als CSV-Datei">&#11015; Ergebnisse herunterladen (CSV)</button>
+          </div>
+
+          <h4 class="text-sm text-muted mb-1">Fragen importieren</h4>
+          <div class="btn-group" style="flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm" id="btnDownloadTemplateCSV" title="Laedt eine CSV-Vorlage mit Beispielfragen herunter, die als Import-Vorlage dient">&#11015; CSV-Vorlage</button>
+            <button class="btn btn-outline btn-sm" id="btnDownloadTemplateJSON" title="Laedt eine JSON-Vorlage mit Beispielfragen herunter, die als Import-Vorlage dient">&#11015; JSON-Vorlage</button>
+            <button class="btn btn-outline btn-sm" id="btnImportCSV" title="Importiert Fragen und Antworten aus einer CSV-Datei (Format wie Vorlage)">&#11014; CSV importieren</button>
+            <button class="btn btn-outline btn-sm" id="btnImport" title="Importiert Fragen und Antworten aus einer JSON-Datei (Format wie Vorlage)">&#11014; JSON importieren</button>
+          </div>
+          <input type="file" id="importFile" accept=".json" class="hidden">
+          <input type="file" id="importCSVFile" accept=".csv" class="hidden">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal container -->
+  <div id="modalContainer"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/i18n.js"></script>
+  <script src="/js/admin.js"></script>
+</body>
+</html>

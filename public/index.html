@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Z-Quiz</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="header">
+    <img id="logo" class="logo-img hidden" src="/uploads/logo.png" alt="Logo"
+         onerror="this.classList.add('hidden')">
+    <h1 id="quizTitle">Z-Quiz</h1>
+    <div class="subtitle" id="quizSubtitle"></div>
+    <div class="player-count" id="playerCount" style="display:none">
+      <span class="player-dot"></span>
+      <span id="playerCountNum">0</span> <span data-i18n="players">Players</span>
+    </div>
+  </div>
+
+  <!-- Code Entry Screen (when no quiz code in URL) -->
+  <div class="container hidden" id="codeScreen">
+    <div class="card slide-in" style="margin-top:24px">
+      <h2 class="text-center mb-2">Enter Quiz Code</h2>
+      <div class="form-group">
+        <input type="text" id="quizCodeInput" class="form-control" placeholder="e.g. ABC123"
+               maxlength="10" autocomplete="off" style="text-align:center;font-size:1.5rem;letter-spacing:4px;text-transform:uppercase">
+      </div>
+      <button class="btn btn-primary btn-block btn-lg" id="codeBtn">Join Quiz</button>
+      <p id="codeError" class="text-center text-sm mt-1" style="color:var(--zs-red)"></p>
+      <div class="text-center mt-3">
+        <a href="/admin.html" class="btn btn-outline btn-sm">Admin Login</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Join Screen -->
+  <div class="container hidden" id="joinScreen">
+    <div class="card slide-in" style="margin-top:24px">
+      <h2 class="text-center mb-2" data-i18n="joinTitle">Join Quiz</h2>
+      <div class="form-group">
+        <input type="text" id="playerName" class="form-control" data-i18n="enterName"
+               placeholder="Enter your name" maxlength="30" autocomplete="off">
+      </div>
+      <button class="btn btn-primary btn-block btn-lg" id="joinBtn" data-i18n="joinButton">Join</button>
+      <p id="joinError" class="text-center text-sm mt-1" style="color:var(--zs-red)"></p>
+    </div>
+  </div>
+
+  <!-- Quiz Screen -->
+  <div class="container hidden" id="quizScreen">
+    <!-- Waiting state -->
+    <div class="card text-center slide-in" id="waitingCard">
+      <h2 data-i18n="waitingTitle">Get Ready!</h2>
+      <p class="text-muted mt-1" data-i18n="waitingText">Waiting for the next question...</p>
+    </div>
+
+    <!-- Question state -->
+    <div class="card slide-in hidden" id="questionCard">
+      <div class="text-sm text-muted mb-1" data-i18n="questionTitle">Question</div>
+      <h2 id="questionText" style="font-size:1.3rem;line-height:1.4"></h2>
+
+      <div id="readPrompt" class="text-center mt-2">
+        <p class="text-muted" data-i18n="readQuestion">Read the question...</p>
+      </div>
+
+      <div id="timerSection" class="hidden">
+        <div class="timer-container">
+          <div class="timer-circle" id="timerCircle">--</div>
+          <div class="timer-bar">
+            <div class="timer-bar-fill" id="timerBar" style="width:100%"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="answersSection" class="hidden">
+        <div class="answers-grid" id="answersGrid"></div>
+      </div>
+
+      <div id="answeredMsg" class="hidden text-center mt-2">
+        <p style="font-size:1.2rem;font-weight:700;color:var(--zs-blue)" data-i18n="answered">Answer submitted!</p>
+      </div>
+    </div>
+
+    <!-- Result overlay -->
+    <div id="resultOverlay" class="hidden"></div>
+
+    <!-- Question closed state -->
+    <div class="card slide-in hidden" id="closedCard">
+      <h3 class="mb-1" data-i18n="correctAnswer">Correct Answer</h3>
+      <div id="closedAnswers"></div>
+      <div id="closedStats" class="mt-2"></div>
+    </div>
+
+    <!-- Leaderboard state -->
+    <div class="card slide-in hidden" id="leaderboardCard">
+      <h2 class="text-center mb-2" id="leaderboardTitle" data-i18n="leaderboard">Leaderboard</h2>
+      <div id="leaderboardList" class="leaderboard"></div>
+    </div>
+
+    <!-- Finale state -->
+    <div class="hidden" id="finaleCard">
+      <h2 class="text-center mb-2" style="font-size:2rem" data-i18n="finale">Finale</h2>
+      <div class="podium" id="podium">
+        <div class="podium-place second" id="podium2">
+          <div class="podium-avatar" style="background:var(--zs-silver)">2</div>
+          <div class="podium-name" id="podium2Name">---</div>
+          <div class="podium-score" id="podium2Score">0</div>
+          <div class="podium-bar">2</div>
+        </div>
+        <div class="podium-place first" id="podium1">
+          <div class="podium-avatar" style="background:var(--zs-gold)">1</div>
+          <div class="podium-name" id="podium1Name">---</div>
+          <div class="podium-score" id="podium1Score">0</div>
+          <div class="podium-bar">1</div>
+        </div>
+        <div class="podium-place third" id="podium3">
+          <div class="podium-avatar" style="background:var(--zs-bronze)">3</div>
+          <div class="podium-name" id="podium3Name">---</div>
+          <div class="podium-score" id="podium3Score">0</div>
+          <div class="podium-bar">3</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <canvas id="confetti-canvas"></canvas>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/i18n.js"></script>
+  <script src="/js/player.js"></script>
+</body>
+</html>

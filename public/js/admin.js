@@ -3,6 +3,7 @@
 const socket = io();
 let authHeader = '';
 let adminData = null;
+let adminRole = null;
 let gameState = null;
 let selectedCategoryId = null;
 let categories = [];
@@ -75,6 +76,8 @@ async function apiRaw(path, opts = {}) {
       document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+      // Load admins when switching to admins tab
+      if (tab.dataset.tab === 'admins') loadAdmins();
     });
   });
 
@@ -99,7 +102,7 @@ async function apiRaw(path, opts = {}) {
   document.getElementById('btnSaveSettings').addEventListener('click', saveSettings);
   document.getElementById('btnUploadLogo').addEventListener('click', uploadLogo);
   document.getElementById('btnDeleteLogo').addEventListener('click', deleteLogo);
-  document.getElementById('btnExport').addEventListener('click', exportCSV);
+  document.getElementById('btnExportFinale').addEventListener('click', exportCSV);
   document.getElementById('btnImport').addEventListener('click', () => document.getElementById('importFile').click());
   document.getElementById('importFile').addEventListener('change', importFile);
   document.getElementById('btnImportCSV').addEventListener('click', () => document.getElementById('importCSVFile').click());
@@ -110,6 +113,15 @@ async function apiRaw(path, opts = {}) {
 
   // QR
   document.getElementById('btnGenQR').addEventListener('click', generateQR);
+
+  // Password change
+  document.getElementById('btnChangePassword').addEventListener('click', changePassword);
+
+  // Admin management (superadmin)
+  document.getElementById('btnCreateAdmin').addEventListener('click', createNewAdmin);
+
+  // Logout
+  document.getElementById('btnLogout').addEventListener('click', doLogout);
 })();
 
 async function doLogin() {
@@ -125,15 +137,37 @@ async function doLogin() {
   }
 }
 
+function doLogout() {
+  authHeader = '';
+  localStorage.removeItem('zquiz_auth');
+  adminData = null;
+  adminRole = null;
+  gameState = null;
+  document.getElementById('loginOverlay').classList.remove('hidden');
+  document.getElementById('dashboard').classList.add('hidden');
+  document.getElementById('loginUser').value = '';
+  document.getElementById('loginPass').value = '';
+  document.getElementById('loginError').textContent = '';
+}
+
 async function loadAdmin() {
   const data = await api('/me');
   adminData = data.admin;
+  adminRole = adminData.role || 'admin';
   gameState = data.state;
 
   document.getElementById('adminQuizName').textContent = `${adminData.quiz_name} (${adminData.quiz_code})`;
   document.getElementById('adminStatus').textContent = gameState.status;
 
   if (gameState.language) setLanguage(gameState.language);
+
+  // Show Admins tab only for superadmin
+  const adminsTab = document.getElementById('tabAdmins');
+  if (adminRole === 'superadmin') {
+    adminsTab.classList.remove('hidden');
+  } else {
+    adminsTab.classList.add('hidden');
+  }
 
   // Settings
   document.getElementById('settingQuizName').value = adminData.quiz_name;
@@ -194,11 +228,11 @@ function renderGameCategories() {
     div.innerHTML = `
       <div class="list-item-content">
         <div class="list-item-title">${escapeHtml(cat.name)}</div>
-        <div class="list-item-subtitle">${cat.question_count || catQuestions.length} questions | ${cat.timer_seconds}s timer | ${cat.unlocked ? '&#128275; Unlocked' : '&#128274; Locked'}</div>
+        <div class="list-item-subtitle">${cat.question_count || catQuestions.length} ${t('questions')} | ${cat.timer_seconds}s ${t('timerSeconds')} | ${cat.unlocked ? '&#128275; ' + t('unlock') : '&#128274; ' + t('lock')}</div>
       </div>
       <div class="list-item-actions">
-        <button class="btn btn-outline btn-sm" onclick="showCategoryLeaderboard(${cat.id})" title="Zeigt das Leaderboard dieser Kategorie">&#127942;</button>
-        <button class="btn btn-sm ${cat.unlocked ? 'btn-gray' : 'btn-success'}" onclick="toggleCategory(${cat.id}, ${cat.unlocked})">${cat.unlocked ? 'Lock' : 'Unlock'}</button>
+        <button class="btn btn-outline btn-sm" onclick="showCategoryLeaderboard(${cat.id})">&#127942;</button>
+        <button class="btn btn-sm ${cat.unlocked ? 'btn-gray' : 'btn-success'}" onclick="toggleCategory(${cat.id}, ${cat.unlocked})">${cat.unlocked ? t('lock') : t('unlock')}</button>
       </div>`;
     container.appendChild(div);
 
@@ -214,10 +248,10 @@ function renderGameCategories() {
         qDiv.innerHTML = `
           <div class="list-item-content">
             <div class="list-item-title">${played ? '&#10003; ' : ''}${escapeHtml(q.question_text)}</div>
-            <div class="list-item-subtitle">${q.answers ? q.answers.length : 0} answers${played ? ' | &#10003; played (' + q.response_count + ' responses)' : ''}</div>
+            <div class="list-item-subtitle">${q.answers ? q.answers.length : 0} ${t('answerCount')}${played ? ' | &#10003; ' + t('played') + ' (' + q.response_count + ')' : ''}</div>
           </div>
           <div class="list-item-actions">
-            <button class="btn ${played ? 'btn-gray' : 'btn-primary'} btn-sm" onclick="startQuestion(${q.id})">${played ? 'Replay' : 'Start'}</button>
+            <button class="btn ${played ? 'btn-gray' : 'btn-primary'} btn-sm" onclick="startQuestion(${q.id})">${played ? t('replay') : t('startQuestion')}</button>
           </div>`;
         container.appendChild(qDiv);
       });
@@ -242,7 +276,7 @@ function renderContentCategories() {
     div.innerHTML = `
       <div class="list-item-content" onclick="selectCategory(${cat.id})">
         <div class="list-item-title">${escapeHtml(cat.name)}</div>
-        <div class="list-item-subtitle">${cat.question_count || 0} questions | ${cat.timer_seconds}s</div>
+        <div class="list-item-subtitle">${cat.question_count || 0} ${t('questions')} | ${cat.timer_seconds}s</div>
       </div>
       <div class="list-item-actions">
         <button class="icon-btn" onclick="editCategory(${cat.id})" title="Edit">&#9998;</button>
@@ -255,14 +289,14 @@ function renderContentCategories() {
 function renderQuestions() {
   const container = document.getElementById('questionList');
   if (!selectedCategoryId) {
-    container.innerHTML = '<p class="text-muted text-sm">Select a category</p>';
+    container.innerHTML = `<p class="text-muted text-sm">${t('selectCategory')}</p>`;
     return;
   }
   const catQuestions = questions.filter(q => q.category_id === selectedCategoryId);
   container.innerHTML = '';
 
   if (catQuestions.length === 0) {
-    container.innerHTML = '<p class="text-muted text-sm">No questions in this category</p>';
+    container.innerHTML = `<p class="text-muted text-sm">${t('noQuestionsInCategory')}</p>`;
     return;
   }
 
@@ -272,7 +306,7 @@ function renderQuestions() {
     div.innerHTML = `
       <div class="list-item-content">
         <div class="list-item-title">${escapeHtml(q.question_text)}</div>
-        <div class="list-item-subtitle">${(q.answers || []).length} answers</div>
+        <div class="list-item-subtitle">${(q.answers || []).length} ${t('answerCount')}</div>
       </div>
       <div class="list-item-actions">
         <button class="icon-btn" onclick="editQuestion(${q.id})" title="Edit">&#9998;</button>
@@ -309,7 +343,7 @@ window.startQuestion = async function(id) {
   document.getElementById('liveQuestion').textContent = q ? q.question_text : 'Question active...';
   document.getElementById('liveQuestion').style.color = 'var(--zs-navy)';
   document.getElementById('liveQuestion').style.fontWeight = '600';
-  document.getElementById('liveAnswerCount').textContent = '0 answers';
+  document.getElementById('liveAnswerCount').textContent = `0 ${t('answerCount')}`;
   document.getElementById('btnCloseQuestion').classList.remove('hidden');
   gameState.status = 'question_active';
   updateGameUI();
@@ -325,7 +359,7 @@ async function revealPlace(place) {
 }
 
 async function resetQuiz() {
-  if (!confirm('Neues Quiz starten? Generiert einen neuen Quiz-Code und loescht alle Spieler, Fragen, Kategorien und das Logo.')) return;
+  if (!confirm(t('confirmNewQuiz'))) return;
   const data = await api('/reset-quiz', { method: 'POST' });
   if (data.quiz_code) {
     adminData.quiz_code = data.quiz_code;
@@ -663,7 +697,7 @@ socket.on('player:joined', (data) => {
 });
 
 socket.on('question:answer-count', (data) => {
-  document.getElementById('liveAnswerCount').textContent = `${data.count} answers`;
+  document.getElementById('liveAnswerCount').textContent = `${data.count} ${t('answerCount')}`;
 });
 
 socket.on('question:tick', (data) => {
@@ -673,7 +707,7 @@ socket.on('question:tick', (data) => {
 });
 
 socket.on('question:closed', async (data) => {
-  document.getElementById('liveQuestion').textContent = 'Question closed';
+  document.getElementById('liveQuestion').textContent = t('questionClosed');
   document.getElementById('liveQuestion').style.color = '';
   document.getElementById('liveQuestion').style.fontWeight = '';
   document.getElementById('btnCloseQuestion').classList.add('hidden');
@@ -682,6 +716,159 @@ socket.on('question:closed', async (data) => {
   await loadQuestions(); // Refresh for updated stats & played status
   renderGameCategories();
 });
+
+// ─── Admin management (superadmin) ───────────────────────────
+
+async function loadAdmins() {
+  try {
+    const admins = await api('/admins');
+    const container = document.getElementById('adminList');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (admins.length === 0) {
+      container.innerHTML = '<p class="text-muted text-sm">No admins found</p>';
+      return;
+    }
+
+    const table = document.createElement('table');
+    table.style.cssText = 'width:100%;border-collapse:collapse;font-size:14px';
+    table.innerHTML = `
+      <thead>
+        <tr style="border-bottom:2px solid #e2e8f0;text-align:left">
+          <th style="padding:8px">E-Mail</th>
+          <th style="padding:8px">${t('role')}</th>
+          <th style="padding:8px">Quiz-Code</th>
+          <th style="padding:8px">${t('actions')}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${admins.map(a => `
+          <tr style="border-bottom:1px solid #e2e8f0">
+            <td style="padding:8px">${escapeHtml(a.username)}</td>
+            <td style="padding:8px"><span class="badge">${a.role}</span></td>
+            <td style="padding:8px"><code>${a.quiz_code}</code></td>
+            <td style="padding:8px">
+              ${a.id === adminData.id || a.role === 'superadmin' ? '' : `<button class="btn btn-danger btn-sm" onclick="deleteAdmin(${a.id})">${t('delete')}</button>`}
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>`;
+    container.appendChild(table);
+  } catch (e) {
+    // Not superadmin or error
+  }
+}
+
+async function createNewAdmin() {
+  const email = document.getElementById('newAdminEmail').value.trim();
+  const password = document.getElementById('newAdminPassword').value;
+  const confirm = document.getElementById('newAdminPasswordConfirm').value;
+  const msgEl = document.getElementById('createAdminMsg');
+
+  // Validate email format
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    msgEl.style.display = '';
+    msgEl.style.color = 'var(--zs-red)';
+    msgEl.textContent = t('invalidEmail');
+    return;
+  }
+  if (!password || password.length < 6) {
+    msgEl.style.display = '';
+    msgEl.style.color = 'var(--zs-red)';
+    msgEl.textContent = t('passwordMinLength');
+    return;
+  }
+  if (password !== confirm) {
+    msgEl.style.display = '';
+    msgEl.style.color = 'var(--zs-red)';
+    msgEl.textContent = t('passwordsMismatch');
+    return;
+  }
+
+  try {
+    const result = await api('/admins', { method: 'POST', body: { email, password } });
+    if (result.ok) {
+      msgEl.style.display = '';
+      msgEl.style.color = 'var(--zs-green)';
+      msgEl.textContent = t('adminCreated');
+      document.getElementById('newAdminEmail').value = '';
+      document.getElementById('newAdminPassword').value = '';
+      document.getElementById('newAdminPasswordConfirm').value = '';
+      await loadAdmins();
+      setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
+    } else {
+      msgEl.style.display = '';
+      msgEl.style.color = 'var(--zs-red)';
+      msgEl.textContent = result.error || 'Error creating admin';
+    }
+  } catch (e) {
+    msgEl.style.display = '';
+    msgEl.style.color = 'var(--zs-red)';
+    msgEl.textContent = e.message || 'Error creating admin';
+  }
+}
+
+window.deleteAdmin = async function(id) {
+  if (!confirm(t('confirmDeleteAdmin'))) return;
+  try {
+    await api(`/admins/${id}`, { method: 'DELETE' });
+    await loadAdmins();
+  } catch (e) {
+    alert(e.message || 'Error deleting admin');
+  }
+};
+
+// ─── Password change ─────────────────────────────────────────
+
+async function changePassword() {
+  const current = document.getElementById('settingCurrentPassword').value;
+  const newPw = document.getElementById('settingNewPassword').value;
+  const confirm = document.getElementById('settingConfirmPassword').value;
+  const msgEl = document.getElementById('changePasswordMsg');
+
+  if (!current) {
+    msgEl.style.display = '';
+    msgEl.style.color = 'var(--zs-red)';
+    msgEl.textContent = t('currentPasswordRequired');
+    return;
+  }
+  if (!newPw || newPw.length < 6) {
+    msgEl.style.display = '';
+    msgEl.style.color = 'var(--zs-red)';
+    msgEl.textContent = t('passwordMinLength');
+    return;
+  }
+  if (newPw !== confirm) {
+    msgEl.style.display = '';
+    msgEl.style.color = 'var(--zs-red)';
+    msgEl.textContent = t('passwordsMismatch');
+    return;
+  }
+
+  try {
+    const result = await api('/change-password', { method: 'PUT', body: { currentPassword: current, newPassword: newPw } });
+    if (result.ok) {
+      msgEl.style.display = '';
+      msgEl.style.color = 'var(--zs-green)';
+      msgEl.textContent = t('passwordChanged');
+      document.getElementById('settingCurrentPassword').value = '';
+      document.getElementById('settingNewPassword').value = '';
+      document.getElementById('settingConfirmPassword').value = '';
+      // Update stored auth with new password
+      setAuth(adminData.username, newPw);
+      setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
+    } else {
+      msgEl.style.display = '';
+      msgEl.style.color = 'var(--zs-red)';
+      msgEl.textContent = result.error || 'Error';
+    }
+  } catch (e) {
+    msgEl.style.display = '';
+    msgEl.style.color = 'var(--zs-red)';
+    msgEl.textContent = e.message || 'Error';
+  }
+}
 
 // ─── Helpers ──────────────────────────────────────────────────
 

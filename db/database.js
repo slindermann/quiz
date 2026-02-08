@@ -82,17 +82,25 @@ async function init() {
     // Column already exists — ignore
   }
 
+  // Migration: add role column to admins if missing
+  try {
+    db.run("ALTER TABLE admins ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'");
+    persist();
+  } catch (e) {
+    // Column already exists — ignore
+  }
+
   // Create default admin if none exists
   const admin = get('SELECT id FROM admins LIMIT 1');
   if (!admin) {
-    const username = process.env.ADMIN_USER || 'admin';
+    const username = process.env.ADMIN_USER || 'admin@local';
     const password = process.env.ADMIN_PASS || 'admin123';
     const hash = bcrypt.hashSync(password, 10);
     const quizCode = generateQuizCode();
 
     run(
-      'INSERT INTO admins (username, password_hash, quiz_code, quiz_name) VALUES (?, ?, ?, ?)',
-      [username, hash, quizCode, 'Zscaler Workshop Quiz']
+      'INSERT INTO admins (username, password_hash, quiz_code, quiz_name, role) VALUES (?, ?, ?, ?, ?)',
+      [username, hash, quizCode, 'Zscaler Workshop Quiz', 'superadmin']
     );
 
     run(
@@ -100,9 +108,19 @@ async function init() {
       [1, 'idle', 'en', parseInt(process.env.ANSWER_DELAY_SECONDS) || 3]
     );
 
-    console.log(`Admin created: ${username} / ${password}`);
+    console.log(`Superadmin created: ${username} / ${password}`);
     console.log(`Quiz code: ${quizCode}`);
     console.log(`Join URL: /join/${quizCode}`);
+  } else {
+    // Ensure at least one superadmin exists (migration from old DB)
+    const superadmin = get("SELECT id FROM admins WHERE role = 'superadmin' LIMIT 1");
+    if (!superadmin) {
+      const firstAdmin = get('SELECT id FROM admins ORDER BY id ASC LIMIT 1');
+      if (firstAdmin) {
+        run("UPDATE admins SET role = 'superadmin' WHERE id = ?", [firstAdmin.id]);
+        console.log(`Migrated admin id=${firstAdmin.id} to superadmin role`);
+      }
+    }
   }
 }
 
@@ -541,6 +559,34 @@ function seedExampleQuestions(adminId) {
   }
 }
 
+// ─── Admin management helpers ───────────────────────────────
+
+function createAdmin(email, passwordHash) {
+  const quizCode = generateQuizCode();
+  const result = runReturningId(
+    'INSERT INTO admins (username, password_hash, quiz_code, quiz_name, role) VALUES (?, ?, ?, ?, ?)',
+    [email, passwordHash, quizCode, 'My Quiz', 'admin']
+  );
+  const adminId = result.lastInsertRowid;
+  run(
+    'INSERT INTO game_state (admin_id, status, language, answer_delay_seconds) VALUES (?, ?, ?, ?)',
+    [adminId, 'idle', 'en', 3]
+  );
+  return { id: adminId, quiz_code: quizCode };
+}
+
+function getAllAdmins() {
+  return all("SELECT id, username, role, quiz_code, quiz_name FROM admins ORDER BY id");
+}
+
+function deleteAdmin(adminId) {
+  run('DELETE FROM admins WHERE id = ?', [adminId]);
+}
+
+function updateAdminPassword(adminId, newHash) {
+  run('UPDATE admins SET password_hash = ? WHERE id = ?', [newHash, adminId]);
+}
+
 module.exports = {
   init,
   getDb,
@@ -587,5 +633,9 @@ module.exports = {
   getPlayerCount,
   resetQuiz,
   seedExampleQuestions,
-  generateQuizCode
+  generateQuizCode,
+  createAdmin,
+  getAllAdmins,
+  deleteAdmin,
+  updateAdminPassword
 };

@@ -3,7 +3,8 @@ CREATE TABLE IF NOT EXISTS admins (
   username TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   quiz_code TEXT UNIQUE NOT NULL,
-  quiz_name TEXT NOT NULL DEFAULT 'My Quiz'
+  quiz_name TEXT NOT NULL DEFAULT 'My Quiz',
+  role TEXT NOT NULL DEFAULT 'admin'
 );
 
 CREATE TABLE IF NOT EXISTS categories (

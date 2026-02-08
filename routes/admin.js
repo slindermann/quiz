@@ -32,6 +32,13 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+function requireSuperadmin(req, res, next) {
+  if (req.admin.role !== 'superadmin') {
+    return res.status(403).json({ error: 'Superadmin access required' });
+  }
+  next();
+}
+
 router.use(requireAdmin);
 
 // ─── Admin info ─────────────────────────────────────────────
@@ -40,6 +47,54 @@ router.get('/me', (req, res) => {
   const { password_hash, ...admin } = req.admin;
   const state = db.getGameState(req.admin.id);
   res.json({ admin, state });
+});
+
+// ─── Admin management (superadmin only) ─────────────────────
+
+router.get('/admins', requireSuperadmin, (req, res) => {
+  const admins = db.getAllAdmins();
+  res.json(admins);
+});
+
+router.post('/admins', requireSuperadmin, (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+
+  const existing = db.getAdminByUsername(email);
+  if (existing) return res.status(409).json({ error: 'An admin with this email already exists' });
+
+  const hash = bcrypt.hashSync(password, 10);
+  const result = db.createAdmin(email, hash);
+  res.json({ ok: true, id: result.id, quiz_code: result.quiz_code });
+});
+
+router.delete('/admins/:id', requireSuperadmin, (req, res) => {
+  const targetId = parseInt(req.params.id);
+  if (targetId === req.admin.id) return res.status(400).json({ error: 'Cannot delete yourself' });
+
+  const target = db.getAdminById(targetId);
+  if (!target) return res.status(404).json({ error: 'Admin not found' });
+  if (target.role === 'superadmin') return res.status(400).json({ error: 'Cannot delete another superadmin' });
+
+  db.deleteAdmin(targetId);
+  res.json({ ok: true });
+});
+
+// ─── Password change (all admins) ──────────────────────────
+
+router.put('/change-password', (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Current and new password required' });
+  if (newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' });
+
+  if (!bcrypt.compareSync(currentPassword, req.admin.password_hash)) {
+    return res.status(401).json({ error: 'Current password is incorrect' });
+  }
+
+  const hash = bcrypt.hashSync(newPassword, 10);
+  db.updateAdminPassword(req.admin.id, hash);
+  res.json({ ok: true });
 });
 
 // ─── Categories ─────────────────────────────────────────────

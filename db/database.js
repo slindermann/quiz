@@ -1,6 +1,7 @@
 const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 
 const DB_PATH = path.join(__dirname, '..', 'quiz.db');
@@ -94,7 +95,7 @@ async function init() {
   const admin = get('SELECT id FROM admins LIMIT 1');
   if (!admin) {
     const username = process.env.ADMIN_USER || 'admin@local';
-    const password = process.env.ADMIN_PASS || 'admin123';
+    const password = process.env.ADMIN_PASS || crypto.randomBytes(12).toString('base64url');
     const hash = bcrypt.hashSync(password, 10);
     const quizCode = generateQuizCode();
 
@@ -108,7 +109,11 @@ async function init() {
       [1, 'idle', 'en', parseInt(process.env.ANSWER_DELAY_SECONDS) || 3]
     );
 
-    console.log(`Superadmin created: ${username} / ${password}`);
+    console.log(`Superadmin created: ${username}`);
+    if (!process.env.ADMIN_PASS) {
+      console.log(`Generated password: ${password}`);
+      console.log(`Change this password after first login!`);
+    }
     console.log(`Quiz code: ${quizCode}`);
     console.log(`Join URL: /join/${quizCode}`);
   } else {
@@ -126,9 +131,10 @@ async function init() {
 
 function generateQuizCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = crypto.randomBytes(6);
   let code = '';
   for (let i = 0; i < 6; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
+    code += chars[bytes[i] % chars.length];
   }
   return code;
 }
@@ -143,7 +149,9 @@ function getAdminById(id) {
   return get('SELECT * FROM admins WHERE id = ?', [id]);
 }
 
+const ADMIN_FIELDS = ['quiz_name', 'quiz_code', 'password_hash', 'role'];
 function updateAdminField(adminId, field, value) {
+  if (!ADMIN_FIELDS.includes(field)) throw new Error(`Invalid admin field: ${field}`);
   run(`UPDATE admins SET ${field} = ? WHERE id = ?`, [value, adminId]);
 }
 
@@ -170,10 +178,12 @@ function createCategory(adminId, name, timerSeconds = 15) {
   );
 }
 
+const CATEGORY_FIELDS = ['name', 'sort_order', 'unlocked', 'timer_seconds'];
 function updateCategory(id, fields) {
   const sets = [];
   const vals = [];
   for (const [k, v] of Object.entries(fields)) {
+    if (!CATEGORY_FIELDS.includes(k)) throw new Error(`Invalid category field: ${k}`);
     sets.push(`${k} = ?`);
     vals.push(v);
   }
@@ -228,10 +238,12 @@ function createQuestion(categoryId, adminId, text) {
   );
 }
 
+const QUESTION_FIELDS = ['question_text', 'sort_order', 'active', 'category_id'];
 function updateQuestion(id, fields) {
   const sets = [];
   const vals = [];
   for (const [k, v] of Object.entries(fields)) {
+    if (!QUESTION_FIELDS.includes(k)) throw new Error(`Invalid question field: ${k}`);
     sets.push(`${k} = ?`);
     vals.push(v);
   }
@@ -249,6 +261,13 @@ function getAnswersByQuestion(questionId) {
   return all('SELECT * FROM answers WHERE question_id = ? ORDER BY sort_order', [questionId]);
 }
 
+function getAnswerWithOwner(answerId) {
+  return get(
+    'SELECT a.*, q.admin_id FROM answers a JOIN questions q ON a.question_id = q.id WHERE a.id = ?',
+    [answerId]
+  );
+}
+
 function createAnswer(questionId, text, isCorrect = 0) {
   const row = get('SELECT COALESCE(MAX(sort_order), 0) as m FROM answers WHERE question_id = ?', [questionId]);
   const maxOrder = row ? row.m : 0;
@@ -258,10 +277,12 @@ function createAnswer(questionId, text, isCorrect = 0) {
   );
 }
 
+const ANSWER_FIELDS = ['answer_text', 'is_correct', 'sort_order'];
 function updateAnswer(id, fields) {
   const sets = [];
   const vals = [];
   for (const [k, v] of Object.entries(fields)) {
+    if (!ANSWER_FIELDS.includes(k)) throw new Error(`Invalid answer field: ${k}`);
     sets.push(`${k} = ?`);
     vals.push(v);
   }
@@ -351,10 +372,12 @@ function getGameState(adminId) {
   return get('SELECT * FROM game_state WHERE admin_id = ?', [adminId]);
 }
 
+const GAME_STATE_FIELDS = ['current_question_id', 'status', 'day', 'language', 'answer_delay_seconds'];
 function updateGameState(adminId, fields) {
   const sets = [];
   const vals = [];
   for (const [k, v] of Object.entries(fields)) {
+    if (!GAME_STATE_FIELDS.includes(k)) throw new Error(`Invalid game_state field: ${k}`);
     sets.push(`${k} = ?`);
     vals.push(v === null ? null : v);
   }
@@ -608,6 +631,7 @@ module.exports = {
   updateQuestion,
   deleteQuestion,
   getAnswersByQuestion,
+  getAnswerWithOwner,
   createAnswer,
   updateAnswer,
   deleteAnswer,

@@ -1,7 +1,6 @@
 // ─── Admin Client Logic ───────────────────────────────────────
 
 const socket = io();
-let authHeader = '';
 let adminData = null;
 let adminRole = null;
 let gameState = null;
@@ -11,27 +10,15 @@ let questions = [];
 
 // ─── Auth ─────────────────────────────────────────────────────
 
-function setAuth(user, pass) {
-  authHeader = 'Basic ' + btoa(user + ':' + pass);
-  localStorage.setItem('zquiz_auth', authHeader);
-}
-
-function getAuth() {
-  return authHeader || localStorage.getItem('zquiz_auth') || '';
-}
-
 async function api(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
   const res = await fetch('/admin/api' + path, {
     ...opts,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': getAuth(),
-      ...(opts.headers || {})
-    },
+    credentials: 'same-origin',
+    headers,
     body: opts.body ? JSON.stringify(opts.body) : undefined
   });
   if (res.status === 401) {
-    localStorage.removeItem('zquiz_auth');
     document.getElementById('loginOverlay').classList.remove('hidden');
     document.getElementById('dashboard').classList.add('hidden');
     throw new Error('Unauthorized');
@@ -42,10 +29,8 @@ async function api(path, opts = {}) {
 async function apiRaw(path, opts = {}) {
   return fetch('/admin/api' + path, {
     ...opts,
-    headers: {
-      'Authorization': getAuth(),
-      ...(opts.headers || {})
-    }
+    credentials: 'same-origin',
+    headers: opts.headers || {}
   });
 }
 
@@ -58,15 +43,13 @@ async function apiRaw(path, opts = {}) {
     if (e.key === 'Enter') doLogin();
   });
 
-  // Try saved auth
-  if (getAuth()) {
-    try {
-      await loadAdmin();
-      document.getElementById('loginOverlay').classList.add('hidden');
-      document.getElementById('dashboard').classList.remove('hidden');
-    } catch (e) {
-      // Show login
-    }
+  // Try existing session (cookie sent automatically)
+  try {
+    await loadAdmin();
+    document.getElementById('loginOverlay').classList.add('hidden');
+    document.getElementById('dashboard').classList.remove('hidden');
+  } catch (e) {
+    // No valid session — show login
   }
 
   // Tabs
@@ -125,10 +108,20 @@ async function apiRaw(path, opts = {}) {
 })();
 
 async function doLogin() {
-  const user = document.getElementById('loginUser').value;
-  const pass = document.getElementById('loginPass').value;
-  setAuth(user, pass);
+  const email = document.getElementById('loginUser').value;
+  const password = document.getElementById('loginPass').value;
   try {
+    const res = await fetch('/admin/api/login', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      document.getElementById('loginError').textContent = data.error || 'Invalid credentials';
+      return;
+    }
     await loadAdmin();
     document.getElementById('loginOverlay').classList.add('hidden');
     document.getElementById('dashboard').classList.remove('hidden');
@@ -137,9 +130,10 @@ async function doLogin() {
   }
 }
 
-function doLogout() {
-  authHeader = '';
-  localStorage.removeItem('zquiz_auth');
+async function doLogout() {
+  try {
+    await fetch('/admin/api/logout', { method: 'POST', credentials: 'same-origin' });
+  } catch (e) { /* ignore */ }
   adminData = null;
   adminRole = null;
   gameState = null;
@@ -203,6 +197,7 @@ async function loadCategories() {
 async function loadQuestions() {
   questions = await api('/questions');
   renderQuestions();
+  renderGameCategories();
   // Show seed examples box only when no questions exist
   const box = document.getElementById('seedExamplesBox');
   if (box) box.classList.toggle('hidden', questions.length > 0);
@@ -855,8 +850,6 @@ async function changePassword() {
       document.getElementById('settingCurrentPassword').value = '';
       document.getElementById('settingNewPassword').value = '';
       document.getElementById('settingConfirmPassword').value = '';
-      // Update stored auth with new password
-      setAuth(adminData.username, newPw);
       setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
     } else {
       msgEl.style.display = '';

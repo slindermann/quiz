@@ -4,32 +4,80 @@ const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const path = require('path');
 const QRCode = require('qrcode');
+const rateLimit = require('express-rate-limit');
 const db = require('../db/database');
+const { createSession, getSession, deleteSession, SESSION_MAX_AGE } = require('../sessions');
 
-// Multer setup for logo uploads
+// ─── Rate limiters ──────────────────────────────────────────
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many login attempts, try again later' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// ─── Multer setup for logo uploads (M2: MIME type validation) ─
+
+const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+const ALLOWED_IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
 const storage = multer.diskStorage({
   destination: path.join(__dirname, '..', 'uploads'),
   filename: (req, file, cb) => {
-    cb(null, 'logo' + path.extname(file.originalname));
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!ALLOWED_IMAGE_EXTS.includes(ext)) {
+      return cb(new Error('Invalid file type'));
+    }
+    cb(null, 'logo' + ext);
   }
 });
-const upload = multer({ storage, limits: { fileSize: 2 * 1024 * 1024 } });
+const upload = multer({
+  storage,
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
+      return cb(new Error('Only image files are allowed'));
+    }
+    cb(null, true);
+  }
+});
 
 // ─── Auth middleware ────────────────────────────────────────
 
 function requireAdmin(req, res, next) {
+  // Check session cookie first (H4)
+  const sessionToken = req.cookies && req.cookies.admin_session;
+  if (sessionToken) {
+    const session = getSession(sessionToken);
+    if (session) {
+      const admin = db.getAdminById(session.adminId);
+      if (admin) {
+        req.admin = admin;
+        return next();
+      }
+    }
+    res.clearCookie('admin_session', { path: '/' });
+  }
+
+  // Fallback to Basic Auth (for API/testing)
   const auth = req.headers.authorization;
-  if (!auth || !auth.startsWith('Basic ')) {
-    return res.status(401).json({ error: 'Authentication required' });
+  if (auth && auth.startsWith('Basic ')) {
+    const decoded = Buffer.from(auth.split(' ')[1], 'base64').toString();
+    // L6: Handle colons in password
+    const idx = decoded.indexOf(':');
+    if (idx > 0) {
+      const username = decoded.substring(0, idx);
+      const password = decoded.substring(idx + 1);
+      const admin = db.getAdminByUsername(username);
+      if (admin && bcrypt.compareSync(password, admin.password_hash)) {
+        req.admin = admin;
+        return next();
+      }
+    }
   }
-  const decoded = Buffer.from(auth.split(' ')[1], 'base64').toString();
-  const [username, password] = decoded.split(':');
-  const admin = db.getAdminByUsername(username);
-  if (!admin || !bcrypt.compareSync(password, admin.password_hash)) {
-    return res.status(401).json({ error: 'Invalid credentials' });
-  }
-  req.admin = admin;
-  next();
+
+  return res.status(401).json({ error: 'Authentication required' });
 }
 
 function requireSuperadmin(req, res, next) {
@@ -38,6 +86,42 @@ function requireSuperadmin(req, res, next) {
   }
   next();
 }
+
+// ─── Public routes (no auth) ────────────────────────────────
+
+router.post('/login', loginLimiter, (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+
+  const admin = db.getAdminByUsername(email);
+  if (!admin || !bcrypt.compareSync(password, admin.password_hash)) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+
+  const token = createSession(admin.id);
+  res.cookie('admin_session', token, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: SESSION_MAX_AGE,
+    path: '/'
+  });
+
+  const { password_hash, ...adminData } = admin;
+  const state = db.getGameState(admin.id);
+  res.json({ admin: adminData, state });
+});
+
+router.post('/logout', (req, res) => {
+  const sessionToken = req.cookies && req.cookies.admin_session;
+  if (sessionToken) {
+    deleteSession(sessionToken);
+    res.clearCookie('admin_session', { path: '/' });
+  }
+  res.json({ ok: true });
+});
+
+// ─── All routes below require authentication ────────────────
 
 router.use(requireAdmin);
 
@@ -221,6 +305,8 @@ router.post('/answers', (req, res) => {
 });
 
 router.put('/answers/:id', (req, res) => {
+  const answer = db.getAnswerWithOwner(parseInt(req.params.id));
+  if (!answer || answer.admin_id !== req.admin.id) return res.status(404).json({ error: 'Not found' });
   const allowed = ['answer_text', 'is_correct', 'sort_order'];
   const fields = {};
   for (const k of allowed) {
@@ -231,6 +317,8 @@ router.put('/answers/:id', (req, res) => {
 });
 
 router.delete('/answers/:id', (req, res) => {
+  const answer = db.getAnswerWithOwner(parseInt(req.params.id));
+  if (!answer || answer.admin_id !== req.admin.id) return res.status(404).json({ error: 'Not found' });
   db.deleteAnswer(req.params.id);
   res.json({ ok: true });
 });
@@ -502,12 +590,22 @@ router.get('/export', (req, res) => {
   const results = db.getFullResults(req.admin.id);
   const header = 'Player,Question,Answer,Correct,Points,Time(ms)\n';
   const csv = header + results.map(r =>
-    `"${r.name}","${r.question_text}","${r.answer_text}",${r.is_correct},${r.points_earned},${r.response_time_ms}`
+    `${csvSafe(r.name)},${csvSafe(r.question_text)},${csvSafe(r.answer_text)},${r.is_correct},${r.points_earned},${r.response_time_ms}`
   ).join('\n');
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename=quiz-results.csv');
   res.send(csv);
 });
+
+// H7: Sanitize CSV values to prevent formula injection
+function csvSafe(str) {
+  if (!str) return '""';
+  let s = String(str);
+  // Prefix formula-triggering characters
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  // Escape double quotes and wrap in quotes
+  return '"' + s.replace(/"/g, '""') + '"';
+}
 
 // ─── Import questions ───────────────────────────────────────
 

@@ -1,4 +1,6 @@
+const cookie = require('cookie');
 const db = require('../db/database');
+const { getSession } = require('../sessions');
 
 // Track when answers became visible per quiz (for time-based scoring)
 const answersVisibleAt = {};
@@ -38,14 +40,29 @@ module.exports = function setupSockets(io) {
       }
     });
 
-    // ─── Admin joins ──────────────────────────────────────
+    // ─── Admin joins (H6: validate session) ───────────────
 
     socket.on('admin:join', ({ quiz_code }) => {
       if (!quiz_code) return;
       const code = quiz_code.toUpperCase();
+
+      // Validate admin session from cookie
+      const cookies = cookie.parse(socket.handshake.headers.cookie || '');
+      const sessionToken = cookies.admin_session;
+      const session = getSession(sessionToken);
+      if (!session) {
+        return socket.emit('error', { message: 'Authentication required' });
+      }
+
+      const admin = db.getAdminById(session.adminId);
+      if (!admin || admin.quiz_code !== code) {
+        return socket.emit('error', { message: 'Unauthorized' });
+      }
+
       socket.join(code);
       socket.quizCode = code;
       socket.isAdmin = true;
+      socket.adminId = admin.id;
     });
 
     // ─── Submit answer ────────────────────────────────────

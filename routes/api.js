@@ -1,11 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
+const rateLimit = require('express-rate-limit');
 const db = require('../db/database');
+
+const joinLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'Too many join attempts, try again later' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 // ─── Join quiz ──────────────────────────────────────────────
 
-router.post('/join', (req, res) => {
+router.post('/join', joinLimiter, (req, res) => {
   const { name, quiz_code } = req.body;
   if (!name || !quiz_code) {
     return res.status(400).json({ error: 'Name and quiz_code required' });
@@ -36,7 +45,9 @@ router.post('/join', (req, res) => {
 
   res.cookie('quiz_token', token, {
     maxAge: 7 * 24 * 60 * 60 * 1000,
-    sameSite: 'lax'
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production'
   });
 
   // Notify admin of new player

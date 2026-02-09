@@ -83,8 +83,19 @@ idle → question_active → answers_visible → question_closed → [showing_le
 - All UI strings use i18n: `data-i18n` attributes in HTML, `t('key')` in JS
 - SQL injection prevention: Column allowlists (`ADMIN_FIELDS`, `CATEGORY_FIELDS`, etc.) on all update functions
 - CSV export: `csvSafe()` prevents formula injection
-- File upload: MIME type + extension allowlist for logo
+- File upload: MIME type + extension allowlist for logo, per-admin filenames (`logo-{adminId}.ext`)
 - Legal pages: `/impressum.html` and `/datenschutz.html` with footer links on player + admin pages
+
+## Security
+
+- **Helmet**: CSP, X-Frame-Options, X-Content-Type-Options, etc.
+- **CORS**: Socket.IO restricted via `ALLOWED_ORIGINS` env var (comma-separated)
+- **Player auth**: Cookie-only (`quiz_token`), no tokens in URLs/query params
+- **Socket rate limiting**: Per-socket limits on `quiz:join` (10/min), `answer:submit` (30/min)
+- **Cross-quiz isolation**: Socket validates player belongs to the quiz before accepting answers
+- **SQL injection**: Column allowlists (`ADMIN_FIELDS`, `CATEGORY_FIELDS`, etc.) on all update functions
+- **CSV formula injection**: `csvSafe()` prefixes trigger characters
+- **Body size limit**: `express.json({ limit: '100kb' })`
 
 ## Known Gotchas
 

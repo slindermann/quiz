@@ -5,6 +5,18 @@ const { getSession } = require('../sessions');
 // Track when answers became visible per quiz (for time-based scoring)
 const answersVisibleAt = {};
 
+// Simple per-socket rate limiter
+function rateLimit(socket, event, maxPerMinute) {
+  if (!socket._rateLimits) socket._rateLimits = {};
+  const now = Date.now();
+  const key = event;
+  if (!socket._rateLimits[key]) socket._rateLimits[key] = [];
+  socket._rateLimits[key] = socket._rateLimits[key].filter(ts => now - ts < 60000);
+  if (socket._rateLimits[key].length >= maxPerMinute) return false;
+  socket._rateLimits[key].push(now);
+  return true;
+}
+
 module.exports = function setupSockets(io) {
   io.on('connection', (socket) => {
 
@@ -12,16 +24,24 @@ module.exports = function setupSockets(io) {
 
     socket.on('quiz:join', ({ quiz_code, playerToken }) => {
       if (!quiz_code) return;
+      if (!rateLimit(socket, 'quiz:join', 10)) return;
+
       const code = quiz_code.toUpperCase();
       socket.join(code);
       socket.quizCode = code;
 
-      // Identify the player
+      // Identify the player and verify they belong to this quiz
       if (playerToken) {
         const player = db.getPlayerByToken(playerToken);
-        if (player) {
+        const admin = db.getAdminByQuizCode(code);
+        if (player && admin && player.admin_id === admin.id) {
           socket.playerId = player.id;
           socket.playerName = player.name;
+          socket.adminId = admin.id;
+        } else {
+          socket.playerId = null;
+          socket.playerName = null;
+          socket.adminId = null;
         }
       }
 
@@ -71,9 +91,17 @@ module.exports = function setupSockets(io) {
       if (!socket.playerId || !socket.quizCode) {
         return socket.emit('answer:error', { error: 'Not in a quiz' });
       }
+      if (!rateLimit(socket, 'answer:submit', 30)) {
+        return socket.emit('answer:error', { error: 'Too many requests' });
+      }
 
       const admin = db.getAdminByQuizCode(socket.quizCode);
       if (!admin) return;
+
+      // Verify player belongs to this quiz
+      if (socket.adminId !== admin.id) {
+        return socket.emit('answer:error', { error: 'Not in this quiz' });
+      }
 
       const state = db.getGameState(admin.id);
       if (state.status !== 'answers_visible') {

@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const path = require('path');
 const db = require('./db/database');
@@ -13,10 +14,27 @@ async function start() {
 
   const app = express();
   const server = http.createServer(app);
-  const io = new Server(server);
+
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',')
+    : undefined; // undefined = allow all (dev mode)
+  const io = new Server(server, {
+    cors: allowedOrigins ? { origin: allowedOrigins } : undefined
+  });
 
   // Middleware
-  app.use(express.json());
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:"],
+        connectSrc: ["'self'", "ws:", "wss:"]
+      }
+    }
+  }));
+  app.use(express.json({ limit: '100kb' }));
   app.use(cookieParser());
   app.use(express.static(path.join(__dirname, 'public')));
   app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

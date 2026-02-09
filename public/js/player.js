@@ -85,22 +85,19 @@ function initWithCode(code) {
     })
     .catch(() => {});
 
-  // Check if already joined (via stored token)
-  const savedToken = getToken();
-  if (savedToken) {
-    fetch(`/api/me?token=${savedToken}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.player && data.quiz_code === quizCode) {
-          playerId = data.player.id;
-          playerName = data.player.name;
-          playerToken = savedToken;
-          totalScore = data.player.total_score || 0;
-          enterQuiz();
-        }
-      })
-      .catch(() => {});
-  }
+  // Check if already joined (via cookie — sent automatically)
+  fetch('/api/me', { credentials: 'same-origin' })
+    .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+    .then(data => {
+      if (data.player && data.quiz_code === quizCode) {
+        playerId = data.player.id;
+        playerName = data.player.name;
+        playerToken = data.token;
+        totalScore = data.player.total_score || 0;
+        enterQuiz();
+      }
+    })
+    .catch(() => {});
 
   // Join button
   document.getElementById('joinBtn').addEventListener('click', joinQuiz);
@@ -113,10 +110,11 @@ function initWithCode(code) {
 }
 
 function loadLogo() {
+  if (!quizCode) return;
   const logo = document.getElementById('logo');
   const img = new Image();
   img.onload = () => { logo.src = img.src; logo.classList.remove('hidden'); };
-  img.src = '/uploads/logo.png';
+  img.src = `/api/logo/${quizCode}`;
 }
 
 function joinQuiz() {

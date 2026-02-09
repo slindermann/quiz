@@ -183,7 +183,10 @@ function loadLogoPreview() {
     document.getElementById('logoPreviewImg').src = img.src;
     document.getElementById('logoPreview').style.display = '';
   };
-  img.src = '/uploads/logo.png?' + Date.now();
+  img.onerror = () => {
+    document.getElementById('logoPreview').style.display = 'none';
+  };
+  img.src = `/api/logo/${adminData.quiz_code}?t=${Date.now()}`;
 }
 
 // ─── Data loading ─────────────────────────────────────────────

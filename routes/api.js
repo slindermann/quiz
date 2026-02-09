@@ -19,6 +19,9 @@ router.post('/join', joinLimiter, (req, res) => {
   if (!name || !quiz_code) {
     return res.status(400).json({ error: 'Name and quiz_code required' });
   }
+  if (name.trim().length > 30) {
+    return res.status(400).json({ error: 'Name too long (max 30 characters)' });
+  }
 
   const admin = db.getAdminByQuizCode(quiz_code.toUpperCase());
   if (!admin) {
@@ -67,7 +70,7 @@ router.post('/join', joinLimiter, (req, res) => {
 // ─── Get current player ────────────────────────────────────
 
 router.get('/me', (req, res) => {
-  const token = req.cookies.quiz_token || req.query.token;
+  const token = req.cookies.quiz_token;
   if (!token) return res.status(401).json({ error: 'Not joined' });
 
   const player = db.getPlayerByToken(token);
@@ -166,7 +169,7 @@ router.get('/qr', async (req, res) => {
   if (!admin) return res.status(404).json({ error: 'Quiz not found' });
 
   const QRCode = require('qrcode');
-  const baseUrl = req.query.base_url || `${req.protocol}://${req.get('host')}`;
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
   const url = `${baseUrl}/join/${admin.quiz_code}`;
   try {
     const dataUrl = await QRCode.toDataURL(url, { width: 300, margin: 2 });
@@ -174,6 +177,23 @@ router.get('/qr', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: 'QR generation failed' });
   }
+});
+
+// ─── Logo per admin (public) ────────────────────────────────
+
+router.get('/logo/:quiz_code', (req, res) => {
+  const admin = db.getAdminByQuizCode(req.params.quiz_code.toUpperCase());
+  if (!admin) return res.status(404).end();
+
+  const path = require('path');
+  const fs = require('fs');
+  const EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
+  const uploadsDir = path.join(__dirname, '..', 'uploads');
+  for (const ext of EXTS) {
+    const filePath = path.join(uploadsDir, `logo-${admin.id}${ext}`);
+    if (fs.existsSync(filePath)) return res.sendFile(filePath);
+  }
+  res.status(404).end();
 });
 
 // ─── Get quiz info (for landing page) ──────────────────────

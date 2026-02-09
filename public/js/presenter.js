@@ -30,7 +30,7 @@ let currentQuestionText = '';
   const logo = document.getElementById('presLogo');
   const img = new Image();
   img.onload = () => { logo.src = img.src; logo.classList.remove('hidden'); };
-  img.src = '/uploads/logo.png';
+  img.src = `/api/logo/${quizCode}`;
 
   // Connect socket
   socket.emit('quiz:join', { quiz_code: quizCode });

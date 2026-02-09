@@ -29,7 +29,7 @@ const storage = multer.diskStorage({
     if (!ALLOWED_IMAGE_EXTS.includes(ext)) {
       return cb(new Error('Invalid file type'));
     }
-    cb(null, 'logo' + ext);
+    cb(null, `logo-${req.admin.id}${ext}`);
   }
 });
 const upload = multer({
@@ -42,6 +42,24 @@ const upload = multer({
     cb(null, true);
   }
 });
+
+// ─── Logo helpers ───────────────────────────────────────────
+
+const fs = require('fs');
+
+function getAdminLogoPath(adminId) {
+  const uploadsDir = path.join(__dirname, '..', 'uploads');
+  for (const ext of ALLOWED_IMAGE_EXTS) {
+    const filePath = path.join(uploadsDir, `logo-${adminId}${ext}`);
+    if (fs.existsSync(filePath)) return filePath;
+  }
+  return null;
+}
+
+function deleteAdminLogo(adminId) {
+  const logoPath = getAdminLogoPath(adminId);
+  if (logoPath) fs.unlinkSync(logoPath);
+}
 
 // ─── Auth middleware ────────────────────────────────────────
 
@@ -514,10 +532,7 @@ router.post('/reset-quiz', (req, res) => {
   const oldCode = req.admin.quiz_code;
   const result = db.resetQuiz(req.admin.id);
 
-  // Delete logo
-  const logoPath = path.join(__dirname, '..', 'uploads', 'logo.png');
-  const fs = require('fs');
-  if (fs.existsSync(logoPath)) fs.unlinkSync(logoPath);
+  deleteAdminLogo(req.admin.id);
 
   if (global.activeLeaderboardContext) delete global.activeLeaderboardContext[req.admin.id];
 
@@ -556,16 +571,14 @@ router.post('/upload-logo', upload.single('logo'), (req, res) => {
 });
 
 router.delete('/delete-logo', (req, res) => {
-  const fs = require('fs');
-  const logoPath = path.join(__dirname, '..', 'uploads', 'logo.png');
-  if (fs.existsSync(logoPath)) fs.unlinkSync(logoPath);
+  deleteAdminLogo(req.admin.id);
   res.json({ ok: true });
 });
 
 // ─── QR Code ────────────────────────────────────────────────
 
 router.get('/qrcode', async (req, res) => {
-  const baseUrl = req.query.base_url || `${req.protocol}://${req.get('host')}`;
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
   const url = `${baseUrl}/join/${req.admin.quiz_code}`;
   try {
     const dataUrl = await QRCode.toDataURL(url, { width: 400, margin: 2 });

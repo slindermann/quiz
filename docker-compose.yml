@@ -1,0 +1,11 @@
+services:
+  z-quiz:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data/quiz.db:/app/quiz.db
+      - ./data/uploads:/app/uploads
+    env_file:
+      - .env

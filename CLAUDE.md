@@ -16,6 +16,21 @@ lsof -ti :3000 | xargs kill -9 && node server.js  # Kill stuck server + restart
 - Override with `ADMIN_USER` + `ADMIN_PASS` in `.env`
 - No test framework or linter configured
 
+## Deployment
+
+Dockerized, runs in an LXC container on Proxmox behind a Caddy reverse proxy.
+
+```bash
+docker compose up -d              # Start
+docker compose up -d --build      # Rebuild after code changes
+docker compose logs               # View logs
+```
+
+- Production URL: https://quiz.local-area.network
+- Git repo: https://github.com/slindermann/quiz
+- Deploy: `cd /opt/quiz && git pull && docker compose up -d --build`
+- DB + uploads persisted via Docker volumes in `./data/`
+
 ## Architecture
 
 Live quiz app (Kahoot-style) for workshops. Node.js + Express + Socket.IO + SQLite (sql.js).
@@ -69,6 +84,7 @@ idle → question_active → answers_visible → question_closed → [showing_le
 - SQL injection prevention: Column allowlists (`ADMIN_FIELDS`, `CATEGORY_FIELDS`, etc.) on all update functions
 - CSV export: `csvSafe()` prevents formula injection
 - File upload: MIME type + extension allowlist for logo
+- Legal pages: `/impressum.html` and `/datenschutz.html` with footer links on player + admin pages
 
 ## Known Gotchas
 

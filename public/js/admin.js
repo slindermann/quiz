@@ -104,8 +104,7 @@ async function apiRaw(path, opts = {}) {
   document.getElementById('btnDownloadTemplateCSV').addEventListener('click', downloadTemplateCSV);
   document.getElementById('btnOpenPresenter').addEventListener('click', openPresenter);
 
-  // QR
-  document.getElementById('btnGenQR').addEventListener('click', generateQR);
+  // QR (auto-generated in finishLoadAdmin)
 
   // Password change
   document.getElementById('btnChangePassword').addEventListener('click', changePassword);
@@ -215,6 +214,7 @@ async function finishLoadAdmin() {
   socket.emit('admin:join', { quiz_code: adminData.quiz_code });
 
   loadLogoPreview();
+  generateQR();
   await loadCategories();
   await loadQuestions();
   updateGameUI();
@@ -409,9 +409,7 @@ async function resetQuiz() {
     adminData.quiz_code = data.quiz_code;
     document.getElementById('adminQuizName').textContent = `${adminData.quiz_name} (${data.quiz_code})`;
     socket.emit('admin:join', { quiz_code: data.quiz_code });
-    // Refresh QR code if it was generated
-    const qrContainer = document.getElementById('qrContainer');
-    if (qrContainer.querySelector('img')) generateQR();
+    generateQR();
   }
   await loadCategories();
   await loadQuestions();
@@ -671,7 +669,6 @@ async function generateQR() {
   container.innerHTML = `
     <img src="${data.qr}" alt="QR Code">
     <div class="qr-url">${escapeHtml(data.url)} <button class="icon-btn" onclick="copyUrl('${escapeHtml(data.url)}')" title="Copy URL">&#128203;</button></div>
-    <button class="btn btn-outline btn-sm mt-1" onclick="generateQR()">Refresh</button>
   `;
 }
 

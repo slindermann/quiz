@@ -62,6 +62,7 @@ async function start() {
   // Make io and shared state accessible to routes
   app.set('io', io);
   app.set('answersVisibleAt', answersVisibleAt);
+  global.answersVisibleAt = answersVisibleAt;
 
   const PORT = process.env.PORT || 3000;
   server.listen(PORT, () => {

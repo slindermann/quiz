@@ -101,7 +101,7 @@ async function init() {
   }
 
   // Migration: add auto-control columns to game_state if missing
-  for (const col of ['auto_close', 'auto_category_leaderboard', 'auto_finale']) {
+  for (const col of ['auto_close', 'auto_category_leaderboard', 'auto_finale', 'auto_advance']) {
     try {
       db.run(`ALTER TABLE game_state ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 1`);
       persist();
@@ -223,6 +223,17 @@ function getQuestionCountByCategory(categoryId) {
 
 function getQuestionsByCategory(categoryId) {
   return all('SELECT * FROM questions WHERE category_id = ? ORDER BY sort_order', [categoryId]);
+}
+
+function getNextUnplayedQuestion(categoryId) {
+  return get(
+    `SELECT q.* FROM questions q
+     WHERE q.category_id = ?
+       AND q.id NOT IN (SELECT DISTINCT question_id FROM responses WHERE question_id IN (SELECT id FROM questions WHERE category_id = ?))
+     ORDER BY q.sort_order
+     LIMIT 1`,
+    [categoryId, categoryId]
+  );
 }
 
 function getQuestionsByAdmin(adminId) {
@@ -391,7 +402,7 @@ function getGameState(adminId) {
   return get('SELECT * FROM game_state WHERE admin_id = ?', [adminId]);
 }
 
-const GAME_STATE_FIELDS = ['current_question_id', 'status', 'day', 'language', 'answer_delay_seconds', 'auto_close', 'auto_category_leaderboard', 'auto_finale'];
+const GAME_STATE_FIELDS = ['current_question_id', 'status', 'day', 'language', 'answer_delay_seconds', 'auto_close', 'auto_category_leaderboard', 'auto_finale', 'auto_advance'];
 function updateGameState(adminId, fields) {
   const sets = [];
   const vals = [];
@@ -706,6 +717,7 @@ module.exports = {
   deleteCategory,
   getQuestionCountByCategory,
   getQuestionsByCategory,
+  getNextUnplayedQuestion,
   getQuestionsByAdmin,
   getQuestionById,
   getQuestionWithAnswers,

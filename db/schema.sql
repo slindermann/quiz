@@ -64,7 +64,8 @@ CREATE TABLE IF NOT EXISTS game_state (
   answer_delay_seconds INTEGER NOT NULL DEFAULT 3,
   auto_close INTEGER NOT NULL DEFAULT 1,
   auto_category_leaderboard INTEGER NOT NULL DEFAULT 1,
-  auto_finale INTEGER NOT NULL DEFAULT 1
+  auto_finale INTEGER NOT NULL DEFAULT 1,
+  auto_advance INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS pending_registrations (

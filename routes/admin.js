@@ -358,18 +358,16 @@ router.delete('/answers/:id', (req, res) => {
 
 // ─── Game control ───────────────────────────────────────────
 
-router.post('/start-question/:id', (req, res) => {
-  const q = db.getQuestionWithAnswers(parseInt(req.params.id));
-  if (!q || q.admin_id !== req.admin.id) return res.status(404).json({ error: 'Not found' });
+function startQuestionSequence(adminId, questionId, io, room, answersVisibleAt) {
+  const q = db.getQuestionWithAnswers(questionId);
+  if (!q) return;
 
-  db.updateGameState(req.admin.id, {
+  db.updateGameState(adminId, {
     current_question_id: q.id,
     status: 'question_active'
   });
 
-  const io = req.app.get('io');
-  const room = req.admin.quiz_code;
-  const state = db.getGameState(req.admin.id);
+  const state = db.getGameState(adminId);
 
   // Send question text only (no answers yet)
   io.to(room).emit('question:show', {
@@ -382,15 +380,13 @@ router.post('/start-question/:id', (req, res) => {
   // Schedule answers to appear after delay
   const delay = (state.answer_delay_seconds || 3) * 1000;
   setTimeout(() => {
-    const currentState = db.getGameState(req.admin.id);
+    const currentState = db.getGameState(adminId);
     if (currentState.status !== 'question_active' || currentState.current_question_id !== q.id) {
-      return; // State changed, don't show answers
+      return;
     }
-    db.updateGameState(req.admin.id, { status: 'answers_visible' });
+    db.updateGameState(adminId, { status: 'answers_visible' });
 
-    // Record timestamp for time-based scoring
-    const answersVisibleAt = req.app.get('answersVisibleAt');
-    if (answersVisibleAt) answersVisibleAt[req.admin.id] = Date.now();
+    if (answersVisibleAt) answersVisibleAt[adminId] = Date.now();
 
     const cat = db.getCategoryById(q.category_id);
     const timerSeconds = cat ? cat.timer_seconds : 15;
@@ -409,15 +405,23 @@ router.post('/start-question/:id', (req, res) => {
       io.to(room).emit('question:tick', { remaining, total: timerSeconds });
       if (remaining <= 0) {
         clearInterval(timer);
-        closeQuestion(req.admin.id, q.id, io, room);
+        closeQuestion(adminId, q.id, io, room);
       }
     }, 1000);
 
-    // Store timer so it can be cancelled
     if (!global.activeTimers) global.activeTimers = {};
-    if (global.activeTimers[req.admin.id]) clearInterval(global.activeTimers[req.admin.id]);
-    global.activeTimers[req.admin.id] = timer;
+    if (global.activeTimers[adminId]) clearInterval(global.activeTimers[adminId]);
+    global.activeTimers[adminId] = timer;
   }, delay);
+}
+
+router.post('/start-question/:id', (req, res) => {
+  const q = db.getQuestionWithAnswers(parseInt(req.params.id));
+  if (!q || q.admin_id !== req.admin.id) return res.status(404).json({ error: 'Not found' });
+
+  const io = req.app.get('io');
+  const answersVisibleAt = req.app.get('answersVisibleAt');
+  startQuestionSequence(req.admin.id, q.id, io, req.admin.quiz_code, answersVisibleAt);
 
   res.json({ ok: true, questionId: q.id });
 });
@@ -496,6 +500,16 @@ function closeQuestion(adminId, questionId, io, room) {
         io.to(room).emit('leaderboard:show', { leaderboard, categoryName, overall: false });
         io.to(room).emit('game:state', { status: 'showing_leaderboard' });
       }, 4000);
+    } else if (!categoryDone && currentState.auto_advance) {
+      // Category not done + auto-advance enabled → start next question after delay
+      const nextQ = db.getNextUnplayedQuestion(q.category_id);
+      if (nextQ) {
+        setTimeout(() => {
+          const s = db.getGameState(adminId);
+          if (s.status !== 'question_closed') return;
+          startQuestionSequence(adminId, nextQ.id, io, room, global.answersVisibleAt);
+        }, 4000);
+      }
     }
   }
 }
@@ -565,7 +579,7 @@ router.post('/show-leaderboard', (req, res) => {
 });
 
 router.post('/game-settings', (req, res) => {
-  const allowed = ['auto_close', 'auto_category_leaderboard', 'auto_finale'];
+  const allowed = ['auto_close', 'auto_category_leaderboard', 'auto_finale', 'auto_advance'];
   const updates = {};
   for (const key of allowed) {
     if (req.body[key] !== undefined) {

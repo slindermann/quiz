@@ -755,8 +755,20 @@ window.hideModal = function() {
 socket.on('game:state', (data) => {
   if (gameState) Object.assign(gameState, data);
   else gameState = data;
+  // Sync currentQuestionId (camelCase from server) → current_question_id (used by renderGameCategories)
+  if (data.currentQuestionId !== undefined) {
+    gameState.current_question_id = data.currentQuestionId;
+  }
   updateGameUI();
-  document.getElementById('adminStatus').textContent = data.status;
+  // Update live question display and re-render categories when a new question starts via auto-advance
+  if (data.status === 'question_active' && data.currentQuestionId) {
+    const q = questions.find(q => q.id === data.currentQuestionId);
+    document.getElementById('liveQuestion').textContent = q ? q.question_text : 'Question active...';
+    document.getElementById('liveQuestion').style.color = 'var(--zs-navy)';
+    document.getElementById('liveQuestion').style.fontWeight = '600';
+    document.getElementById('liveAnswerCount').textContent = `0 ${t('answerCount')}`;
+    renderGameCategories();
+  }
 });
 
 socket.on('player:count', (data) => {

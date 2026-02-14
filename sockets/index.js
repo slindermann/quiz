@@ -1,6 +1,7 @@
 const cookie = require('cookie');
 const db = require('../db/database');
 const { getSession } = require('../sessions');
+const { closeQuestion } = require('../routes/admin');
 
 // Track when answers became visible per quiz (for time-based scoring)
 const answersVisibleAt = {};
@@ -151,6 +152,18 @@ module.exports = function setupSockets(io) {
       // Update live answer count
       const count = db.getAnswerCount(submittedQId);
       io.to(socket.quizCode).emit('question:answer-count', { questionId: submittedQId, count });
+
+      // Auto-close question 1s after all players have answered
+      const playerCount = db.getPlayerCount(admin.id);
+      if (count >= playerCount) {
+        if (!global.autoCloseTimers) global.autoCloseTimers = {};
+        if (!global.autoCloseTimers[admin.id]) {
+          global.autoCloseTimers[admin.id] = setTimeout(() => {
+            delete global.autoCloseTimers[admin.id];
+            closeQuestion(admin.id, submittedQId, io, socket.quizCode);
+          }, 1000);
+        }
+      }
     });
 
     // ─── Disconnect ───────────────────────────────────────

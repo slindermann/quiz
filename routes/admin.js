@@ -432,6 +432,10 @@ function closeQuestion(adminId, questionId, io, room) {
     clearInterval(global.activeTimers[adminId]);
     delete global.activeTimers[adminId];
   }
+  if (global.autoCloseTimers && global.autoCloseTimers[adminId]) {
+    clearTimeout(global.autoCloseTimers[adminId]);
+    delete global.autoCloseTimers[adminId];
+  }
 
   db.updateGameState(adminId, { status: 'question_closed' });
 
@@ -885,3 +889,4 @@ router.delete('/players/:id', (req, res) => {
 });
 
 module.exports = router;
+module.exports.closeQuestion = closeQuestion;

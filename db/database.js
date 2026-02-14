@@ -455,13 +455,17 @@ function isCategoryFullyPlayed(categoryId) {
 
 function areAllCategoriesPlayed(adminId) {
   const total = get(
-    'SELECT COUNT(*) as c FROM questions WHERE admin_id = ?', [adminId]
+    `SELECT COUNT(*) as c FROM questions q
+     JOIN categories c ON c.id = q.category_id
+     WHERE q.admin_id = ? AND c.unlocked = 1`,
+    [adminId]
   );
   if (!total || total.c === 0) return false;
   const played = get(
     `SELECT COUNT(DISTINCT q.id) as c FROM questions q
+     JOIN categories c ON c.id = q.category_id
      JOIN responses r ON r.question_id = q.id
-     WHERE q.admin_id = ?`,
+     WHERE q.admin_id = ? AND c.unlocked = 1`,
     [adminId]
   );
   return played && played.c >= total.c;

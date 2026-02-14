@@ -70,7 +70,7 @@ async function init() {
     db = new SQL.Database();
   }
 
-  db.run("PRAGMA foreign_keys = ON");
+  db.exec("PRAGMA foreign_keys = ON;");
 
   const schema = fs.readFileSync(SCHEMA_PATH, 'utf-8');
   db.exec(schema);
@@ -116,6 +116,15 @@ async function init() {
     } catch (e) {
       // Column already exists — ignore
     }
+  }
+
+  // Clean up orphaned data (sql.js CASCADE unreliable)
+  const orphanedQ = get('SELECT COUNT(*) as c FROM questions WHERE category_id NOT IN (SELECT id FROM categories)');
+  if (orphanedQ && orphanedQ.c > 0) {
+    run('DELETE FROM answers WHERE question_id IN (SELECT id FROM questions WHERE category_id NOT IN (SELECT id FROM categories))');
+    run('DELETE FROM responses WHERE question_id IN (SELECT id FROM questions WHERE category_id NOT IN (SELECT id FROM categories))');
+    run('DELETE FROM questions WHERE category_id NOT IN (SELECT id FROM categories)');
+    console.log(`Cleaned up ${orphanedQ.c} orphaned questions`);
   }
 
   // Create default admin if none exists
@@ -219,6 +228,10 @@ function updateCategory(id, fields) {
 }
 
 function deleteCategory(id) {
+  // Explicit deletion (sql.js CASCADE unreliable)
+  run('DELETE FROM answers WHERE question_id IN (SELECT id FROM questions WHERE category_id = ?)', [id]);
+  run('DELETE FROM responses WHERE question_id IN (SELECT id FROM questions WHERE category_id = ?)', [id]);
+  run('DELETE FROM questions WHERE category_id = ?', [id]);
   run('DELETE FROM categories WHERE id = ?', [id]);
 }
 
@@ -289,6 +302,9 @@ function updateQuestion(id, fields) {
 }
 
 function deleteQuestion(id) {
+  // Explicit deletion (sql.js CASCADE unreliable)
+  run('DELETE FROM answers WHERE question_id = ?', [id]);
+  run('DELETE FROM responses WHERE question_id = ?', [id]);
   run('DELETE FROM questions WHERE id = ?', [id]);
 }
 
@@ -514,6 +530,9 @@ function resetQuiz(adminId) {
   run('UPDATE admins SET quiz_code = ? WHERE id = ?', [newQuizCode, adminId]);
   run('DELETE FROM responses WHERE player_id IN (SELECT id FROM players WHERE admin_id = ?)', [adminId]);
   run('DELETE FROM players WHERE admin_id = ?', [adminId]);
+  // Explicit deletion (sql.js CASCADE unreliable)
+  run('DELETE FROM answers WHERE question_id IN (SELECT id FROM questions WHERE admin_id = ?)', [adminId]);
+  run('DELETE FROM questions WHERE admin_id = ?', [adminId]);
   run('DELETE FROM categories WHERE admin_id = ?', [adminId]);
 
   updateGameState(adminId, {

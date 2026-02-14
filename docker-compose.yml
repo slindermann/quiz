@@ -7,5 +7,7 @@ services:
     volumes:
       - ./data/quiz.db:/app/quiz.db
       - ./data/uploads:/app/uploads
+    environment:
+      - NODE_ENV=production
     env_file:
       - .env

@@ -31,7 +31,8 @@ async function start() {
         scriptSrcAttr: ["'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:"],
-        connectSrc: ["'self'", "ws:", "wss:"]
+        connectSrc: ["'self'", "ws:", "wss:"],
+        upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null
       }
     }
   }));

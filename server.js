@@ -44,9 +44,11 @@ async function start() {
   // Routes
   const adminRoutes = require('./routes/admin');
   const apiRoutes = require('./routes/api');
+  const registerRoutes = require('./routes/register');
 
   app.use('/admin/api', adminRoutes);
   app.use('/api', apiRoutes);
+  app.use('/api', registerRoutes);
 
   // Join URL redirect
   app.get('/join/:code', (req, res) => {

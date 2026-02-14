@@ -7,6 +7,7 @@ const bcrypt = require('bcryptjs');
 const DB_PATH = path.join(__dirname, '..', 'quiz.db');
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 const SEED_PATH = path.join(__dirname, 'seed.sql');
+const SEED_DATA_PATH = path.join(__dirname, '..', 'seed-data.json');
 
 let db;
 let saveTimeout;
@@ -86,6 +87,14 @@ async function init() {
   // Migration: add role column to admins if missing
   try {
     db.run("ALTER TABLE admins ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'");
+    persist();
+  } catch (e) {
+    // Column already exists — ignore
+  }
+
+  // Migration: add must_change_password column to admins if missing
+  try {
+    db.run("ALTER TABLE admins ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0");
     persist();
   } catch (e) {
     // Column already exists — ignore
@@ -485,90 +494,112 @@ function resetQuiz(adminId) {
   return { quiz_code: newQuizCode };
 }
 
-function seedExampleQuestions(adminId) {
-  const seedData = [
-    {
-      name: 'Zero Trust for Users (ZIA/ZPA)', timer: 15, questions: [
-        { text: 'What does ZPA stand for?', answers: [
-          { text: 'Zscaler Private Access', correct: true },
-          { text: 'Zero Protocol Architecture', correct: false },
-          { text: 'Zscaler Public Analytics', correct: false },
-          { text: 'Zone Protection Agent', correct: false }
-        ]},
-        { text: 'Which protocol does ZIA inspect to protect users from threats?', answers: [
-          { text: 'SSL/TLS', correct: true },
-          { text: 'FTP only', correct: false },
-          { text: 'SMTP only', correct: false },
-          { text: 'DNS only', correct: false }
-        ]},
-        { text: "What is the primary benefit of Zscaler's Zero Trust Exchange?", answers: [
-          { text: 'Users connect directly to apps, not the network', correct: true },
-          { text: 'Faster VPN connections', correct: false },
-          { text: 'More firewall rules', correct: false },
-          { text: 'Bigger network bandwidth', correct: false }
-        ]}
-      ]
-    },
-    {
-      name: 'Digital Experience (ZDX)', timer: 15, questions: [
-        { text: 'What does ZDX stand for?', answers: [
-          { text: 'Zscaler Digital Experience', correct: true },
-          { text: 'Zero Data Exchange', correct: false },
-          { text: 'Zscaler DDoS eXterminator', correct: false },
-          { text: 'Zone Defense eXpert', correct: false }
-        ]},
-        { text: 'What does ZDX primarily monitor?', answers: [
-          { text: 'End-to-end user experience and application performance', correct: true },
-          { text: 'Only server CPU usage', correct: false },
-          { text: 'Only network bandwidth', correct: false },
-          { text: 'Only DNS resolution times', correct: false }
-        ]}
-      ]
-    },
-    {
-      name: 'Branch & IoT/OT', timer: 15, questions: [
-        { text: 'What is the Zscaler solution for branch office connectivity?', answers: [
-          { text: 'Branch Connector', correct: true },
-          { text: 'Branch VPN Hub', correct: false },
-          { text: 'SD-WAN Router', correct: false },
-          { text: 'MPLS Gateway', correct: false }
-        ]},
-        { text: 'How does Zscaler protect IoT/OT devices?', answers: [
-          { text: 'By isolating IoT traffic and applying zero trust policies', correct: true },
-          { text: 'By installing agents on every IoT device', correct: false },
-          { text: 'By using traditional firewalls only', correct: false },
-          { text: 'IoT devices cannot be protected', correct: false }
-        ]}
-      ]
-    },
-    {
-      name: 'Data Protection (DLP)', timer: 15, questions: [
-        { text: 'What type of data can Zscaler DLP detect?', answers: [
-          { text: 'PII, financial data, intellectual property, and custom patterns', correct: true },
-          { text: 'Only credit card numbers', correct: false },
-          { text: 'Only email addresses', correct: false },
-          { text: 'Only file names', correct: false }
-        ]},
-        { text: 'Where does Zscaler DLP inspect data?', answers: [
-          { text: 'Inline (in transit) and at rest (SaaS apps, endpoints)', correct: true },
-          { text: 'Only on the endpoint', correct: false },
-          { text: 'Only in the data center', correct: false },
-          { text: 'Only in email', correct: false }
-        ]}
-      ]
-    },
-    {
-      name: 'Workload Protection', timer: 15, questions: [
-        { text: 'What does Zscaler Workload Communications protect?', answers: [
-          { text: 'Cloud workload-to-workload and workload-to-internet traffic', correct: true },
-          { text: 'Only virtual machines', correct: false },
-          { text: 'Only containers', correct: false },
-          { text: 'Only serverless functions', correct: false }
-        ]}
-      ]
-    }
-  ];
+const DEFAULT_SEED_DATA = [
+  {
+    name: 'Zero Trust for Users (ZIA/ZPA)', timer: 15, questions: [
+      { text: 'What does ZPA stand for?', answers: [
+        { text: 'Zscaler Private Access', correct: true },
+        { text: 'Zero Protocol Architecture', correct: false },
+        { text: 'Zscaler Public Analytics', correct: false },
+        { text: 'Zone Protection Agent', correct: false }
+      ]},
+      { text: 'Which protocol does ZIA inspect to protect users from threats?', answers: [
+        { text: 'SSL/TLS', correct: true },
+        { text: 'FTP only', correct: false },
+        { text: 'SMTP only', correct: false },
+        { text: 'DNS only', correct: false }
+      ]},
+      { text: "What is the primary benefit of Zscaler's Zero Trust Exchange?", answers: [
+        { text: 'Users connect directly to apps, not the network', correct: true },
+        { text: 'Faster VPN connections', correct: false },
+        { text: 'More firewall rules', correct: false },
+        { text: 'Bigger network bandwidth', correct: false }
+      ]}
+    ]
+  },
+  {
+    name: 'Digital Experience (ZDX)', timer: 15, questions: [
+      { text: 'What does ZDX stand for?', answers: [
+        { text: 'Zscaler Digital Experience', correct: true },
+        { text: 'Zero Data Exchange', correct: false },
+        { text: 'Zscaler DDoS eXterminator', correct: false },
+        { text: 'Zone Defense eXpert', correct: false }
+      ]},
+      { text: 'What does ZDX primarily monitor?', answers: [
+        { text: 'End-to-end user experience and application performance', correct: true },
+        { text: 'Only server CPU usage', correct: false },
+        { text: 'Only network bandwidth', correct: false },
+        { text: 'Only DNS resolution times', correct: false }
+      ]}
+    ]
+  },
+  {
+    name: 'Branch & IoT/OT', timer: 15, questions: [
+      { text: 'What is the Zscaler solution for branch office connectivity?', answers: [
+        { text: 'Branch Connector', correct: true },
+        { text: 'Branch VPN Hub', correct: false },
+        { text: 'SD-WAN Router', correct: false },
+        { text: 'MPLS Gateway', correct: false }
+      ]},
+      { text: 'How does Zscaler protect IoT/OT devices?', answers: [
+        { text: 'By isolating IoT traffic and applying zero trust policies', correct: true },
+        { text: 'By installing agents on every IoT device', correct: false },
+        { text: 'By using traditional firewalls only', correct: false },
+        { text: 'IoT devices cannot be protected', correct: false }
+      ]}
+    ]
+  },
+  {
+    name: 'Data Protection (DLP)', timer: 15, questions: [
+      { text: 'What type of data can Zscaler DLP detect?', answers: [
+        { text: 'PII, financial data, intellectual property, and custom patterns', correct: true },
+        { text: 'Only credit card numbers', correct: false },
+        { text: 'Only email addresses', correct: false },
+        { text: 'Only file names', correct: false }
+      ]},
+      { text: 'Where does Zscaler DLP inspect data?', answers: [
+        { text: 'Inline (in transit) and at rest (SaaS apps, endpoints)', correct: true },
+        { text: 'Only on the endpoint', correct: false },
+        { text: 'Only in the data center', correct: false },
+        { text: 'Only in email', correct: false }
+      ]}
+    ]
+  },
+  {
+    name: 'Workload Protection', timer: 15, questions: [
+      { text: 'What does Zscaler Workload Communications protect?', answers: [
+        { text: 'Cloud workload-to-workload and workload-to-internet traffic', correct: true },
+        { text: 'Only virtual machines', correct: false },
+        { text: 'Only containers', correct: false },
+        { text: 'Only serverless functions', correct: false }
+      ]}
+    ]
+  }
+];
 
+function getSeedData() {
+  if (fs.existsSync(SEED_DATA_PATH)) {
+    try {
+      return JSON.parse(fs.readFileSync(SEED_DATA_PATH, 'utf-8'));
+    } catch (e) {
+      console.error('Failed to read seed-data.json, using defaults:', e.message);
+    }
+  }
+  return DEFAULT_SEED_DATA;
+}
+
+function saveSeedData(data) {
+  fs.writeFileSync(SEED_DATA_PATH, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+function resetSeedData() {
+  if (fs.existsSync(SEED_DATA_PATH)) {
+    fs.unlinkSync(SEED_DATA_PATH);
+  }
+}
+
+function seedExampleQuestions(adminId) {
+  const seedData = getSeedData();
   for (const cat of seedData) {
     const catResult = createCategory(adminId, cat.name, cat.timer);
     const catId = catResult.lastInsertRowid;
@@ -608,6 +639,33 @@ function deleteAdmin(adminId) {
 
 function updateAdminPassword(adminId, newHash) {
   run('UPDATE admins SET password_hash = ? WHERE id = ?', [newHash, adminId]);
+}
+
+// ─── Registration helpers ────────────────────────────────────
+
+function createPendingRegistration(email, code) {
+  run('DELETE FROM pending_registrations WHERE email = ?', [email]);
+  run('INSERT INTO pending_registrations (email, code) VALUES (?, ?)', [email, code]);
+}
+
+function getPendingRegistration(email) {
+  return get('SELECT * FROM pending_registrations WHERE email = ?', [email]);
+}
+
+function incrementRegistrationAttempts(email) {
+  run('UPDATE pending_registrations SET attempts = attempts + 1 WHERE email = ?', [email]);
+}
+
+function deletePendingRegistration(email) {
+  run('DELETE FROM pending_registrations WHERE email = ?', [email]);
+}
+
+function setMustChangePassword(adminId, value) {
+  run('UPDATE admins SET must_change_password = ? WHERE id = ?', [value ? 1 : 0, adminId]);
+}
+
+function cleanExpiredRegistrations() {
+  run("DELETE FROM pending_registrations WHERE created_at < datetime('now', '-10 minutes')");
 }
 
 module.exports = {
@@ -657,9 +715,18 @@ module.exports = {
   getPlayerCount,
   resetQuiz,
   seedExampleQuestions,
+  getSeedData,
+  saveSeedData,
+  resetSeedData,
   generateQuizCode,
   createAdmin,
   getAllAdmins,
   deleteAdmin,
-  updateAdminPassword
+  updateAdminPassword,
+  createPendingRegistration,
+  getPendingRegistration,
+  incrementRegistrationAttempts,
+  deletePendingRegistration,
+  setMustChangePassword,
+  cleanExpiredRegistrations
 };

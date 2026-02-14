@@ -112,8 +112,12 @@ function initWithCode(code) {
 function loadLogo() {
   if (!quizCode) return;
   const logo = document.getElementById('logo');
+  const waitingLogo = document.getElementById('waitingLogo');
   const img = new Image();
-  img.onload = () => { logo.src = img.src; logo.classList.remove('hidden'); };
+  img.onload = () => {
+    logo.src = img.src; logo.classList.remove('hidden');
+    if (waitingLogo) { waitingLogo.src = img.src; waitingLogo.classList.remove('hidden'); }
+  };
   img.src = `/api/logo/${quizCode}`;
 }
 

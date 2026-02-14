@@ -45,9 +45,18 @@ async function apiRaw(path, opts = {}) {
 
   // Try existing session (cookie sent automatically)
   try {
-    await loadAdmin();
-    document.getElementById('loginOverlay').classList.add('hidden');
-    document.getElementById('dashboard').classList.remove('hidden');
+    const meData = await api('/me');
+    if (meData.admin && meData.admin.must_change_password) {
+      document.getElementById('loginOverlay').classList.add('hidden');
+      document.getElementById('passwordChangeOverlay').classList.remove('hidden');
+    } else {
+      adminData = meData.admin;
+      adminRole = adminData.role || 'admin';
+      gameState = meData.state;
+      await finishLoadAdmin();
+      document.getElementById('loginOverlay').classList.add('hidden');
+      document.getElementById('dashboard').classList.remove('hidden');
+    }
   } catch (e) {
     // No valid session — show login
   }
@@ -86,12 +95,9 @@ async function apiRaw(path, opts = {}) {
   document.getElementById('btnUploadLogo').addEventListener('click', uploadLogo);
   document.getElementById('btnDeleteLogo').addEventListener('click', deleteLogo);
   document.getElementById('btnExportFinale').addEventListener('click', exportCSV);
-  document.getElementById('btnImport').addEventListener('click', () => document.getElementById('importFile').click());
-  document.getElementById('importFile').addEventListener('change', importFile);
   document.getElementById('btnImportCSV').addEventListener('click', () => document.getElementById('importCSVFile').click());
   document.getElementById('importCSVFile').addEventListener('change', importCSV);
   document.getElementById('btnDownloadTemplateCSV').addEventListener('click', downloadTemplateCSV);
-  document.getElementById('btnDownloadTemplateJSON').addEventListener('click', downloadTemplateJSON);
   document.getElementById('btnOpenPresenter').addEventListener('click', openPresenter);
 
   // QR
@@ -102,6 +108,22 @@ async function apiRaw(path, opts = {}) {
 
   // Admin management (superadmin)
   document.getElementById('btnCreateAdmin').addEventListener('click', createNewAdmin);
+
+  // Seed CSV management (superadmin)
+  document.getElementById('btnDownloadSeedCSV').addEventListener('click', downloadSeedCSV);
+  document.getElementById('btnUploadSeedCSV').addEventListener('click', () => document.getElementById('seedCSVFile').click());
+  document.getElementById('seedCSVFile').addEventListener('change', uploadSeedCSV);
+  document.getElementById('btnResetSeedData').addEventListener('click', resetSeedData);
+
+  // Forced password change
+  document.getElementById('btnForceChangePassword').addEventListener('click', forceChangePassword);
+  document.getElementById('forceConfirmPassword').addEventListener('keydown', e => {
+    if (e.key === 'Enter') forceChangePassword();
+  });
+  document.getElementById('btnForceLogout').addEventListener('click', () => {
+    document.getElementById('passwordChangeOverlay').classList.add('hidden');
+    doLogout();
+  });
 
   // Logout
   document.getElementById('btnLogout').addEventListener('click', doLogout);
@@ -120,6 +142,12 @@ async function doLogin() {
     const data = await res.json();
     if (!res.ok || data.error) {
       document.getElementById('loginError').textContent = data.error || 'Invalid credentials';
+      return;
+    }
+    if (data.must_change_password) {
+      document.getElementById('loginOverlay').classList.add('hidden');
+      document.getElementById('passwordChangeOverlay').classList.remove('hidden');
+      document.getElementById('forceCurrentPassword').focus();
       return;
     }
     await loadAdmin();
@@ -149,7 +177,10 @@ async function loadAdmin() {
   adminData = data.admin;
   adminRole = adminData.role || 'admin';
   gameState = data.state;
+  await finishLoadAdmin();
+}
 
+async function finishLoadAdmin() {
   document.getElementById('adminQuizName').textContent = `${adminData.quiz_name} (${adminData.quiz_code})`;
   document.getElementById('adminStatus').textContent = gameState.status;
 
@@ -578,22 +609,6 @@ async function exportCSV() {
   a.click();
 }
 
-async function importFile(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const text = await file.text();
-  try {
-    const data = JSON.parse(text);
-    await api('/import', { method: 'POST', body: data });
-    await loadCategories();
-    await loadQuestions();
-    alert('Import successful!');
-  } catch (err) {
-    alert('Import error: ' + err.message);
-  }
-  e.target.value = '';
-}
-
 async function importCSV(e) {
   const file = e.target.files[0];
   if (!file) return;
@@ -622,16 +637,6 @@ async function downloadTemplateCSV() {
   a.click();
 }
 
-async function downloadTemplateJSON() {
-  const res = await apiRaw('/import-template-json');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'quiz-import-template.json';
-  a.click();
-}
-
 window.copyUrl = function(url) {
   navigator.clipboard.writeText(url).then(() => {
     const btn = event.target;
@@ -653,6 +658,61 @@ async function generateQR() {
     <div class="qr-url">${escapeHtml(data.url)} <button class="icon-btn" onclick="copyUrl('${escapeHtml(data.url)}')" title="Copy URL">&#128203;</button></div>
     <button class="btn btn-outline btn-sm mt-1" onclick="generateQR()">Refresh</button>
   `;
+}
+
+// ─── Seed CSV management (superadmin) ─────────────────────────
+
+async function downloadSeedCSV() {
+  const res = await apiRaw('/seed-csv');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'seed-questions.csv';
+  a.click();
+}
+
+async function uploadSeedCSV(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const msgEl = document.getElementById('seedMsg');
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const res = await apiRaw('/seed-csv', { method: 'POST', body: form });
+    const data = await res.json();
+    if (data.error) {
+      msgEl.style.display = '';
+      msgEl.style.color = 'var(--zs-red)';
+      msgEl.textContent = data.error;
+    } else {
+      msgEl.style.display = '';
+      msgEl.style.color = 'var(--zs-green)';
+      msgEl.textContent = t('seedUpdated').replace('{categories}', data.categories).replace('{questions}', data.questions);
+      setTimeout(() => { msgEl.style.display = 'none'; }, 5000);
+    }
+  } catch (err) {
+    msgEl.style.display = '';
+    msgEl.style.color = 'var(--zs-red)';
+    msgEl.textContent = err.message;
+  }
+  e.target.value = '';
+}
+
+async function resetSeedData() {
+  if (!confirm(t('confirmResetSeed'))) return;
+  const msgEl = document.getElementById('seedMsg');
+  try {
+    await api('/seed-reset', { method: 'POST' });
+    msgEl.style.display = '';
+    msgEl.style.color = 'var(--zs-green)';
+    msgEl.textContent = t('seedResetDone');
+    setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
+  } catch (err) {
+    msgEl.style.display = '';
+    msgEl.style.color = 'var(--zs-red)';
+    msgEl.textContent = err.message;
+  }
 }
 
 // ─── Modal helpers ────────────────────────────────────────────
@@ -863,6 +923,42 @@ async function changePassword() {
     msgEl.style.display = '';
     msgEl.style.color = 'var(--zs-red)';
     msgEl.textContent = e.message || 'Error';
+  }
+}
+
+// ─── Forced password change ───────────────────────────────────
+
+async function forceChangePassword() {
+  const current = document.getElementById('forceCurrentPassword').value;
+  const newPw = document.getElementById('forceNewPassword').value;
+  const confirmPw = document.getElementById('forceConfirmPassword').value;
+  const errorEl = document.getElementById('forcePasswordError');
+  errorEl.textContent = '';
+
+  if (!current) {
+    errorEl.textContent = t('currentPasswordRequired');
+    return;
+  }
+  if (!newPw || newPw.length < 6) {
+    errorEl.textContent = t('passwordMinLength');
+    return;
+  }
+  if (newPw !== confirmPw) {
+    errorEl.textContent = t('passwordsMismatch');
+    return;
+  }
+
+  try {
+    const result = await api('/change-password', { method: 'PUT', body: { currentPassword: current, newPassword: newPw } });
+    if (result.ok) {
+      document.getElementById('passwordChangeOverlay').classList.add('hidden');
+      await loadAdmin();
+      document.getElementById('dashboard').classList.remove('hidden');
+    } else {
+      errorEl.textContent = result.error || 'Error';
+    }
+  } catch (e) {
+    errorEl.textContent = e.message || 'Error';
   }
 }
 

@@ -120,6 +120,35 @@ const I18N = {
     confirmDeleteAdmin: 'Delete this admin? All their data will be removed.',
     currentPasswordRequired: 'Please enter your current password',
     passwordChanged: 'Password changed successfully',
+
+    // Seed management
+    seedQuestions: 'Seed Questions',
+    seedQuestionsDesc: 'Manage the example questions loaded when a new admin creates their quiz.',
+    downloadSeedCSV: '⬇ Download Seed CSV',
+    uploadSeedCSV: '⬆ Upload Seed CSV',
+    resetSeedDefaults: 'Reset to Defaults',
+    confirmResetSeed: 'Reset seed questions to factory defaults?',
+    seedUpdated: 'Seed questions updated: {categories} categories, {questions} questions.',
+    seedResetDone: 'Seed questions reset to defaults.',
+
+    // Registration
+    registerTitle: 'Admin Registration',
+    registerHint: 'Register with your corporate email address.',
+    registerLink: 'Register with corporate email',
+    sendCode: 'Send Verification Code',
+    enterCode: 'Enter Verification Code',
+    verificationCode: 'Verification Code',
+    verify: 'Verify',
+    codeSentTo: 'A verification code has been sent to {email}.',
+    enterValidCode: 'Please enter a 6-digit code',
+    registrationComplete: 'Registration Complete',
+    checkEmailForPassword: 'Check your email for your temporary password.',
+    goToLogin: 'Go to Login',
+    backToLogin: 'Back to Login',
+
+    // Forced password change
+    mustChangePassword: 'Change Password',
+    mustChangePasswordHint: 'You must change your temporary password before continuing.',
   },
   de: {
     // Spieler
@@ -242,6 +271,35 @@ const I18N = {
     confirmDeleteAdmin: 'Diesen Admin löschen? Alle zugehörigen Daten werden entfernt.',
     currentPasswordRequired: 'Bitte aktuelles Passwort eingeben',
     passwordChanged: 'Passwort erfolgreich geändert',
+
+    // Seed-Verwaltung
+    seedQuestions: 'Beispielfragen',
+    seedQuestionsDesc: 'Verwalte die Beispielfragen, die beim Erstellen eines neuen Quiz geladen werden.',
+    downloadSeedCSV: '⬇ Seed-CSV herunterladen',
+    uploadSeedCSV: '⬆ Seed-CSV hochladen',
+    resetSeedDefaults: 'Auf Standard zurücksetzen',
+    confirmResetSeed: 'Beispielfragen auf Werkseinstellungen zurücksetzen?',
+    seedUpdated: 'Beispielfragen aktualisiert: {categories} Kategorien, {questions} Fragen.',
+    seedResetDone: 'Beispielfragen auf Standard zurückgesetzt.',
+
+    // Registrierung
+    registerTitle: 'Admin-Registrierung',
+    registerHint: 'Registriere dich mit deiner Firmen-E-Mail-Adresse.',
+    registerLink: 'Mit Firmen-E-Mail registrieren',
+    sendCode: 'Bestätigungscode senden',
+    enterCode: 'Bestätigungscode eingeben',
+    verificationCode: 'Bestätigungscode',
+    verify: 'Bestätigen',
+    codeSentTo: 'Ein Bestätigungscode wurde an {email} gesendet.',
+    enterValidCode: 'Bitte 6-stelligen Code eingeben',
+    registrationComplete: 'Registrierung abgeschlossen',
+    checkEmailForPassword: 'Prüfe deine E-Mails für dein temporäres Passwort.',
+    goToLogin: 'Zum Login',
+    backToLogin: 'Zurück zum Login',
+
+    // Passwort-Änderung erzwungen
+    mustChangePassword: 'Passwort ändern',
+    mustChangePasswordHint: 'Du musst dein temporäres Passwort ändern, bevor du fortfahren kannst.',
   }
 };
 

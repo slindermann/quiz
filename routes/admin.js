@@ -42,6 +42,7 @@ const upload = multer({
     cb(null, true);
   }
 });
+const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 // ─── Logo helpers ───────────────────────────────────────────
 
@@ -59,6 +60,18 @@ function getAdminLogoPath(adminId) {
 function deleteAdminLogo(adminId) {
   const logoPath = getAdminLogoPath(adminId);
   if (logoPath) fs.unlinkSync(logoPath);
+}
+
+function copySuperadminLogo(targetAdminId) {
+  const superadmin = db.getAdminByUsername(process.env.ADMIN_USER || 'admin');
+  if (!superadmin || superadmin.id === targetAdminId) return;
+  const srcPath = getAdminLogoPath(superadmin.id);
+  if (!srcPath) return;
+  // Delete existing logo of target admin first
+  deleteAdminLogo(targetAdminId);
+  const ext = path.extname(srcPath);
+  const destPath = path.join(path.dirname(srcPath), `logo-${targetAdminId}${ext}`);
+  fs.copyFileSync(srcPath, destPath);
 }
 
 // ─── Auth middleware ────────────────────────────────────────
@@ -127,7 +140,7 @@ router.post('/login', loginLimiter, (req, res) => {
 
   const { password_hash, ...adminData } = admin;
   const state = db.getGameState(admin.id);
-  res.json({ admin: adminData, state });
+  res.json({ admin: adminData, state, must_change_password: !!admin.must_change_password });
 });
 
 router.post('/logout', (req, res) => {
@@ -148,7 +161,7 @@ router.use(requireAdmin);
 router.get('/me', (req, res) => {
   const { password_hash, ...admin } = req.admin;
   const state = db.getGameState(req.admin.id);
-  res.json({ admin, state });
+  res.json({ admin: { ...admin, must_change_password: !!admin.must_change_password }, state });
 });
 
 // ─── Admin management (superadmin only) ─────────────────────
@@ -168,6 +181,7 @@ router.post('/admins', requireSuperadmin, (req, res) => {
 
   const hash = bcrypt.hashSync(password, 10);
   const result = db.createAdmin(email, hash);
+  copySuperadminLogo(result.id);
   res.json({ ok: true, id: result.id, quiz_code: result.quiz_code });
 });
 
@@ -196,6 +210,7 @@ router.put('/change-password', (req, res) => {
 
   const hash = bcrypt.hashSync(newPassword, 10);
   db.updateAdminPassword(req.admin.id, hash);
+  db.setMustChangePassword(req.admin.id, false);
   res.json({ ok: true });
 });
 
@@ -532,7 +547,9 @@ router.post('/reset-quiz', (req, res) => {
   const oldCode = req.admin.quiz_code;
   const result = db.resetQuiz(req.admin.id);
 
+  // Replace logo with superadmin default (or delete if no default exists)
   deleteAdminLogo(req.admin.id);
+  copySuperadminLogo(req.admin.id);
 
   if (global.activeLeaderboardContext) delete global.activeLeaderboardContext[req.admin.id];
 
@@ -544,6 +561,84 @@ router.post('/reset-quiz', (req, res) => {
 
 router.post('/seed-examples', (req, res) => {
   db.seedExampleQuestions(req.admin.id);
+  res.json({ ok: true });
+});
+
+// ─── Seed CSV management (superadmin only) ───────────────────
+
+router.get('/seed-csv', requireSuperadmin, (req, res) => {
+  const seedData = db.getSeedData();
+  const header = 'Category,Timer(s),Question,Answer A,Answer B,Answer C,Answer D,Correct\n';
+  const rows = [];
+  for (const cat of seedData) {
+    for (const q of cat.questions) {
+      const answers = q.answers || [];
+      const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
+      const correctLetters = answers
+        .map((a, i) => a.correct ? letters[i] : null)
+        .filter(Boolean)
+        .join(';');
+      const answerTexts = [];
+      for (let i = 0; i < 4; i++) {
+        answerTexts.push(answers[i] ? csvSafe(answers[i].text) : '""');
+      }
+      rows.push(`${csvSafe(cat.name)},${cat.timer || 15},${csvSafe(q.text)},${answerTexts.join(',')},${csvSafe(correctLetters)}`);
+    }
+  }
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename=seed-questions.csv');
+  res.send(header + rows.join('\n'));
+});
+
+router.post('/seed-csv', requireSuperadmin, csvUpload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+  const text = req.file.buffer.toString('utf-8');
+  const lines = parseCSV(text);
+  if (lines.length < 2) return res.status(400).json({ error: 'CSV must have header + data rows' });
+
+  const rows = lines.slice(1);
+  const categoryMap = {};
+  const seedData = [];
+
+  for (const row of rows) {
+    if (row.length < 7) continue;
+    const [catName, timerStr, questionText, ...rest] = row;
+    if (!catName || !questionText) continue;
+
+    const timer = parseInt(timerStr) || 15;
+    const correctField = (rest[rest.length - 1] || '').trim().toUpperCase();
+    const correctLetters = correctField.split(/[;,]/).map(l => l.trim()).filter(Boolean);
+    const answerTexts = rest.slice(0, rest.length - 1);
+
+    if (!categoryMap[catName]) {
+      const cat = { name: catName.trim(), timer, questions: [] };
+      categoryMap[catName] = cat;
+      seedData.push(cat);
+    }
+
+    const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
+    const answers = [];
+    answerTexts.forEach((aText, i) => {
+      if (aText.trim()) {
+        answers.push({ text: aText.trim(), correct: correctLetters.includes(letters[i]) });
+      }
+    });
+
+    categoryMap[catName].questions.push({ text: questionText.trim(), answers });
+  }
+
+  if (seedData.length === 0) {
+    return res.status(400).json({ error: 'No valid data found in CSV' });
+  }
+
+  const totalQuestions = seedData.reduce((sum, cat) => sum + cat.questions.length, 0);
+  db.saveSeedData(seedData);
+  res.json({ ok: true, categories: seedData.length, questions: totalQuestions });
+});
+
+router.post('/seed-reset', requireSuperadmin, (req, res) => {
+  db.resetSeedData();
   res.json({ ok: true });
 });
 
@@ -691,8 +786,6 @@ router.get('/import-template-json', (req, res) => {
   res.setHeader('Content-Disposition', 'attachment; filename=quiz-import-template.json');
   res.send(JSON.stringify(template, null, 2));
 });
-
-const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 router.post('/import-csv', csvUpload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });

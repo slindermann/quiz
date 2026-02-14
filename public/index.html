@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Z-Quiz</title>
+  <link rel="icon" id="favicon" href="/api/favicon">
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -51,6 +52,7 @@
   <div class="container hidden" id="quizScreen">
     <!-- Waiting state -->
     <div class="card text-center slide-in" id="waitingCard">
+      <img id="waitingLogo" class="hidden" alt="Logo" style="max-height:160px;max-width:400px;margin:0 auto 16px">
       <h2 data-i18n="waitingTitle">Get Ready!</h2>
       <p class="text-muted mt-1" data-i18n="waitingText">Waiting for the next question...</p>
     </div>

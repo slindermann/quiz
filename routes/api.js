@@ -189,9 +189,38 @@ router.get('/logo/:quiz_code', (req, res) => {
   const fs = require('fs');
   const EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
   const uploadsDir = path.join(__dirname, '..', 'uploads');
+
+  // Check admin's own logo first
   for (const ext of EXTS) {
     const filePath = path.join(uploadsDir, `logo-${admin.id}${ext}`);
     if (fs.existsSync(filePath)) return res.sendFile(filePath);
+  }
+
+  // Fallback to superadmin logo
+  const superadmin = db.getAdminByUsername(process.env.ADMIN_USER || 'admin');
+  if (superadmin && superadmin.id !== admin.id) {
+    for (const ext of EXTS) {
+      const filePath = path.join(uploadsDir, `logo-${superadmin.id}${ext}`);
+      if (fs.existsSync(filePath)) return res.sendFile(filePath);
+    }
+  }
+
+  res.status(404).end();
+});
+
+// ─── Favicon (superadmin logo) ───────────────────────────────
+
+router.get('/favicon', (req, res) => {
+  const path = require('path');
+  const fs = require('fs');
+  const EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
+  const uploadsDir = path.join(__dirname, '..', 'uploads');
+  const superadmin = db.getAdminByUsername(process.env.ADMIN_USER || 'admin');
+  if (superadmin) {
+    for (const ext of EXTS) {
+      const filePath = path.join(uploadsDir, `logo-${superadmin.id}${ext}`);
+      if (fs.existsSync(filePath)) return res.sendFile(filePath);
+    }
   }
   res.status(404).end();
 });

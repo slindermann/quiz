@@ -26,10 +26,14 @@ let currentQuestionText = '';
       }
     });
 
-  // Logo
+  // Logo (header + waiting screen)
   const logo = document.getElementById('presLogo');
+  const waitLogo = document.getElementById('presWaitLogo');
   const img = new Image();
-  img.onload = () => { logo.src = img.src; logo.classList.remove('hidden'); };
+  img.onload = () => {
+    logo.src = img.src; logo.classList.remove('hidden');
+    waitLogo.src = img.src; waitLogo.classList.remove('hidden');
+  };
   img.src = `/api/logo/${quizCode}`;
 
   // Connect socket

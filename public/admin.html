@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Z-Quiz Admin</title>
+  <link rel="icon" id="favicon" href="/api/favicon">
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -22,6 +23,34 @@
       </div>
       <button class="btn btn-primary btn-block" id="loginBtn">Login</button>
       <p id="loginError" class="text-center text-sm mt-1" style="color:var(--zs-red)"></p>
+      <div class="text-center mt-2">
+        <a href="/register.html" class="text-sm" style="color:var(--zs-blue)" data-i18n="registerLink">Register with corporate email</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Forced Password Change Overlay -->
+  <div class="login-overlay hidden" id="passwordChangeOverlay">
+    <div class="login-box">
+      <h2 data-i18n="mustChangePassword">Change Password</h2>
+      <p class="text-muted text-sm mb-2" data-i18n="mustChangePasswordHint">You must change your temporary password before continuing.</p>
+      <div class="form-group">
+        <label data-i18n="currentPassword">Current Password</label>
+        <input type="password" id="forceCurrentPassword" class="form-control" autocomplete="current-password">
+      </div>
+      <div class="form-group">
+        <label data-i18n="newPassword">New Password</label>
+        <input type="password" id="forceNewPassword" class="form-control" autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label data-i18n="confirmPassword">Confirm Password</label>
+        <input type="password" id="forceConfirmPassword" class="form-control" autocomplete="new-password">
+      </div>
+      <button class="btn btn-primary btn-block" id="btnForceChangePassword" data-i18n="changePassword">Change Password</button>
+      <p id="forcePasswordError" class="text-center text-sm mt-1" style="color:var(--zs-red)"></p>
+      <div class="text-center mt-2">
+        <button class="btn btn-outline btn-sm" id="btnForceLogout" data-i18n="logout">Logout</button>
+      </div>
     </div>
   </div>
 
@@ -29,7 +58,7 @@
   <div class="hidden" id="dashboard">
     <div class="header">
       <div style="position:absolute;top:12px;right:16px">
-        <button class="btn btn-outline btn-sm" id="btnLogout" data-i18n="logout">Logout</button>
+        <button class="btn btn-sm" id="btnLogout" data-i18n="logout" style="color:white;border:2px solid rgba(255,255,255,0.6);background:transparent">Logout</button>
       </div>
       <h1 data-i18n="adminTitle">Admin Dashboard</h1>
       <div class="subtitle" id="adminQuizName"></div>
@@ -191,11 +220,6 @@
             <button class="btn btn-outline btn-sm" id="btnDownloadTemplateCSV" data-i18n="csvTemplate">&#11015; CSV Template</button>
             <button class="btn btn-outline btn-sm" id="btnImportCSV" data-i18n="importCSV">&#11014; Import CSV</button>
           </div>
-          <div class="btn-group">
-            <button class="btn btn-outline btn-sm" id="btnDownloadTemplateJSON" data-i18n="jsonTemplate">&#11015; JSON Template</button>
-            <button class="btn btn-outline btn-sm" id="btnImport" data-i18n="importJSON">&#11014; Import JSON</button>
-          </div>
-          <input type="file" id="importFile" accept=".json" class="hidden">
           <input type="file" id="importCSVFile" accept=".csv" class="hidden">
 
           <hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0">
@@ -224,6 +248,18 @@
             <h2 data-i18n="adminsTab">Admins</h2>
           </div>
           <div id="adminList"></div>
+
+          <hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0">
+
+          <h3 class="mb-2" data-i18n="seedQuestions">Seed Questions</h3>
+          <p class="text-muted text-sm mb-1" data-i18n="seedQuestionsDesc">Manage the example questions that are loaded when a new admin creates their quiz.</p>
+          <div class="btn-group mb-1">
+            <button class="btn btn-outline btn-sm" id="btnDownloadSeedCSV" data-i18n="downloadSeedCSV">&#11015; Download Seed CSV</button>
+            <button class="btn btn-outline btn-sm" id="btnUploadSeedCSV" data-i18n="uploadSeedCSV">&#11014; Upload Seed CSV</button>
+            <button class="btn btn-danger btn-sm" id="btnResetSeedData" data-i18n="resetSeedDefaults">Reset to Defaults</button>
+          </div>
+          <input type="file" id="seedCSVFile" accept=".csv" class="hidden">
+          <p id="seedMsg" class="text-sm mt-1" style="display:none"></p>
 
           <hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0">
 

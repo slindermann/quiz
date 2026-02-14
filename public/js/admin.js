@@ -209,7 +209,9 @@ async function finishLoadAdmin() {
   document.getElementById('toggleAutoCategoryLeaderboard').checked = gameState.auto_category_leaderboard !== 0;
   document.getElementById('toggleAutoFinale').checked = gameState.auto_finale !== 0;
 
-  // Socket
+  // Reconnect socket so handshake includes the session cookie (needed after fresh login)
+  socket.disconnect();
+  socket.connect();
   socket.emit('admin:join', { quiz_code: adminData.quiz_code });
 
   loadLogoPreview();

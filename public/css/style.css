@@ -260,6 +260,11 @@ select.form-control {
   -webkit-tap-highlight-color: transparent;
 }
 
+.answer-btn:focus {
+  outline: none;
+  box-shadow: none;
+}
+
 .answer-btn:hover:not(.selected):not(.disabled) {
   border-color: var(--zs-blue);
   background: #f0f7ff;

@@ -338,6 +338,9 @@ function showAnswers(answers, timerSeconds) {
     btn.addEventListener('click', () => submitAnswer(a.id, btn));
     grid.appendChild(btn);
   });
+
+  // Remove lingering focus state (iOS Safari keeps focus on previously tapped buttons)
+  if (document.activeElement) document.activeElement.blur();
 }
 
 function submitAnswer(answerId, btn) {

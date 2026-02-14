@@ -432,6 +432,20 @@ function isCategoryFullyPlayed(categoryId) {
   return played && played.c >= total.c;
 }
 
+function areAllCategoriesPlayed(adminId) {
+  const total = get(
+    'SELECT COUNT(*) as c FROM questions WHERE admin_id = ?', [adminId]
+  );
+  if (!total || total.c === 0) return false;
+  const played = get(
+    `SELECT COUNT(DISTINCT q.id) as c FROM questions q
+     JOIN responses r ON r.question_id = q.id
+     WHERE q.admin_id = ?`,
+    [adminId]
+  );
+  return played && played.c >= total.c;
+}
+
 function getOverallLeaderboard(adminId, limit = 50) {
   return all(
     `SELECT p.id, p.name, COALESCE(SUM(r.points_earned), 0) as total_score
@@ -709,6 +723,7 @@ module.exports = {
   getLeaderboard,
   getCategoryLeaderboard,
   isCategoryFullyPlayed,
+  areAllCategoriesPlayed,
   getOverallLeaderboard,
   getTop3,
   getFullResults,

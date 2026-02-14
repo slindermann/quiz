@@ -82,9 +82,6 @@ async function apiRaw(path, opts = {}) {
   document.getElementById('btnSeedExamples').addEventListener('click', seedExamples);
 
   // Finale reveals
-  document.getElementById('btnReveal3').addEventListener('click', () => revealPlace(3));
-  document.getElementById('btnReveal2').addEventListener('click', () => revealPlace(2));
-  document.getElementById('btnReveal1').addEventListener('click', () => revealPlace(1));
 
   // Content buttons
   document.getElementById('btnAddCategory').addEventListener('click', showAddCategoryModal);
@@ -389,9 +386,6 @@ async function startFinale() {
   document.getElementById('finaleControl').classList.remove('hidden');
 }
 
-async function revealPlace(place) {
-  await api('/reveal-next', { method: 'POST', body: { place } });
-}
 
 async function resetQuiz() {
   if (!confirm(t('confirmNewQuiz'))) return;

@@ -1,6 +1,12 @@
 // ─── Player Client Logic ──────────────────────────────────────
 
-const socket = io();
+const socket = io({
+  reconnection: true,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+  timeout: 10000
+});
 let quizCode = null;
 let playerId = null;
 let playerName = '';
@@ -9,17 +15,98 @@ let totalScore = 0;
 let currentQuestionId = null;
 let hasAnswered = false;
 let timerTotal = 15;
+let isConnected = false;
+let hasJoinedQuiz = false;
 
 // ─── Token management ─────────────────────────────────────────
 
 function saveToken(token) {
   playerToken = token;
-  localStorage.setItem('quiz_token', token);
+  try { localStorage.setItem('quiz_token', token); } catch (e) { /* ignore */ }
 }
 
 function getToken() {
-  return playerToken || localStorage.getItem('quiz_token');
+  if (playerToken) return playerToken;
+  try { return localStorage.getItem('quiz_token'); } catch (e) { return null; }
 }
+
+// ─── Connection status UI ────────────────────────────────────
+
+function showConnectionStatus(status) {
+  let banner = document.getElementById('connectionBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'connectionBanner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;text-align:center;padding:6px 12px;font-size:0.85rem;font-weight:600;transition:transform 0.3s ease;transform:translateY(-100%)';
+    document.body.appendChild(banner);
+  }
+  if (status === 'connected') {
+    banner.style.background = 'var(--zs-green)';
+    banner.style.color = 'white';
+    banner.textContent = '✓ Connected';
+    banner.style.transform = 'translateY(0)';
+    setTimeout(() => { banner.style.transform = 'translateY(-100%)'; }, 2000);
+  } else if (status === 'disconnected') {
+    banner.style.background = 'var(--zs-red)';
+    banner.style.color = 'white';
+    banner.textContent = '⚠ Connection lost — reconnecting...';
+    banner.style.transform = 'translateY(0)';
+  } else if (status === 'reconnecting') {
+    banner.style.background = '#FFB800';
+    banner.style.color = '#333';
+    banner.textContent = '↻ Reconnecting...';
+    banner.style.transform = 'translateY(0)';
+  }
+}
+
+// ─── Socket reconnection handling ────────────────────────────
+
+socket.on('connect', () => {
+  isConnected = true;
+  if (hasJoinedQuiz) {
+    // Re-join the quiz room and recover state
+    showConnectionStatus('connected');
+    rejoinAndSync();
+  }
+});
+
+socket.on('disconnect', () => {
+  isConnected = false;
+  if (hasJoinedQuiz) {
+    showConnectionStatus('disconnected');
+  }
+});
+
+socket.on('reconnect_attempt', () => {
+  if (hasJoinedQuiz) {
+    showConnectionStatus('reconnecting');
+  }
+});
+
+function rejoinAndSync() {
+  socket.emit('quiz:join', {
+    quiz_code: quizCode,
+    playerToken: getToken()
+  });
+  // Always fetch full state from REST API on reconnect
+  fetch(`/api/state?quiz_code=${quizCode}`)
+    .then(r => r.json())
+    .then(handleStateSync)
+    .catch(() => {});
+}
+
+// ─── Visibility change handling (mobile screen wake) ─────────
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && hasJoinedQuiz) {
+    // Screen woke up — reconnect socket if needed and sync state
+    if (!socket.connected) {
+      socket.connect();
+    } else {
+      rejoinAndSync();
+    }
+  }
+});
 
 // ─── Init ─────────────────────────────────────────────────────
 
@@ -150,6 +237,7 @@ function joinQuiz() {
 }
 
 function enterQuiz() {
+  hasJoinedQuiz = true;
   document.getElementById('codeScreen').classList.add('hidden');
   document.getElementById('joinScreen').classList.add('hidden');
   document.getElementById('quizScreen').classList.remove('hidden');
@@ -285,7 +373,6 @@ function showClosed(data) {
     const isCorrect = a.is_correct || a.id === correctId;
     div.className = `answer-btn disabled ${isCorrect ? 'correct' : 'wrong'}`;
     div.innerHTML = `<span class="answer-letter">${letters[i]}</span> ${escapeHtml(a.answer_text)}`;
-    // No stats/counts on player view — stats only on presenter
     container.appendChild(div);
   });
 

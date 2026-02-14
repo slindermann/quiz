@@ -1,8 +1,88 @@
 // ─── Presenter Client Logic ───────────────────────────────────
 
-const socket = io();
+const socket = io({
+  reconnection: true,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+  timeout: 10000
+});
 let quizCode = null;
 let currentQuestionText = '';
+let isConnected = false;
+let hasJoined = false;
+
+// ─── Connection status UI ────────────────────────────────────
+
+function showConnectionStatus(status) {
+  let banner = document.getElementById('connectionBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'connectionBanner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;text-align:center;padding:8px 16px;font-size:1rem;font-weight:600;transition:transform 0.3s ease;transform:translateY(-100%)';
+    document.body.appendChild(banner);
+  }
+  if (status === 'connected') {
+    banner.style.background = 'var(--zs-green)';
+    banner.style.color = 'white';
+    banner.textContent = '✓ Connected';
+    banner.style.transform = 'translateY(0)';
+    setTimeout(() => { banner.style.transform = 'translateY(-100%)'; }, 2000);
+  } else if (status === 'disconnected') {
+    banner.style.background = 'var(--zs-red)';
+    banner.style.color = 'white';
+    banner.textContent = '⚠ Connection lost — reconnecting...';
+    banner.style.transform = 'translateY(0)';
+  } else if (status === 'reconnecting') {
+    banner.style.background = '#FFB800';
+    banner.style.color = '#333';
+    banner.textContent = '↻ Reconnecting...';
+    banner.style.transform = 'translateY(0)';
+  }
+}
+
+// ─── Socket reconnection handling ────────────────────────────
+
+socket.on('connect', () => {
+  isConnected = true;
+  if (hasJoined) {
+    showConnectionStatus('connected');
+    rejoinAndSync();
+  }
+});
+
+socket.on('disconnect', () => {
+  isConnected = false;
+  if (hasJoined) {
+    showConnectionStatus('disconnected');
+  }
+});
+
+socket.on('reconnect_attempt', () => {
+  if (hasJoined) {
+    showConnectionStatus('reconnecting');
+  }
+});
+
+function rejoinAndSync() {
+  socket.emit('quiz:join', { quiz_code: quizCode });
+  fetch(`/api/state?quiz_code=${quizCode}`)
+    .then(r => r.json())
+    .then(handleState)
+    .catch(() => {});
+}
+
+// ─── Visibility change handling (screen wake / tab switch) ───
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && hasJoined) {
+    if (!socket.connected) {
+      socket.connect();
+    } else {
+      rejoinAndSync();
+    }
+  }
+});
 
 // ─── Init ─────────────────────────────────────────────────────
 
@@ -15,6 +95,8 @@ let currentQuestionText = '';
       '<div class="presenter-waiting"><h2>No quiz code</h2><p>Add ?quiz=CODE to the URL</p></div>';
     return;
   }
+
+  hasJoined = true;
 
   // Load quiz info
   fetch(`/api/quiz-info?code=${quizCode}`)

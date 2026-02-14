@@ -38,7 +38,13 @@ async function start() {
   }));
   app.use(express.json({ limit: '100kb' }));
   app.use(cookieParser());
-  app.use(express.static(path.join(__dirname, 'public')));
+  app.use(express.static(path.join(__dirname, 'public'), {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.js') || filePath.endsWith('.css')) {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    }
+  }));
   app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
   // Routes

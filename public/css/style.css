@@ -256,6 +256,8 @@ select.form-control {
   transition: all var(--transition);
   text-align: left;
   position: relative;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .answer-btn:hover:not(.selected):not(.disabled) {

@@ -442,6 +442,7 @@ function closeQuestion(adminId, questionId, io, room) {
   }
 
   db.updateGameState(adminId, { status: 'question_closed' });
+  db.updateQuestion(questionId, { played: 1 });
 
   const q = db.getQuestionWithAnswers(questionId);
   const stats = db.getResponseStats(questionId);

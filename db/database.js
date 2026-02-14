@@ -100,6 +100,14 @@ async function init() {
     // Column already exists — ignore
   }
 
+  // Migration: add played column to questions if missing
+  try {
+    db.run("ALTER TABLE questions ADD COLUMN played INTEGER NOT NULL DEFAULT 0");
+    persist();
+  } catch (e) {
+    // Column already exists — ignore
+  }
+
   // Migration: add auto-control columns to game_state if missing
   for (const col of ['auto_close', 'auto_category_leaderboard', 'auto_finale', 'auto_advance']) {
     try {
@@ -228,11 +236,10 @@ function getQuestionsByCategory(categoryId) {
 function getNextUnplayedQuestion(categoryId) {
   return get(
     `SELECT q.* FROM questions q
-     WHERE q.category_id = ?
-       AND q.id NOT IN (SELECT DISTINCT question_id FROM responses WHERE question_id IN (SELECT id FROM questions WHERE category_id = ?))
+     WHERE q.category_id = ? AND q.played = 0
      ORDER BY q.sort_order
      LIMIT 1`,
-    [categoryId, categoryId]
+    [categoryId]
   );
 }
 
@@ -268,7 +275,7 @@ function createQuestion(categoryId, adminId, text) {
   );
 }
 
-const QUESTION_FIELDS = ['question_text', 'sort_order', 'active', 'category_id'];
+const QUESTION_FIELDS = ['question_text', 'sort_order', 'active', 'category_id', 'played'];
 function updateQuestion(id, fields) {
   const sets = [];
   const vals = [];
@@ -444,31 +451,15 @@ function getCategoryLeaderboard(adminId, categoryId, limit = 50) {
 function isCategoryFullyPlayed(categoryId) {
   const total = get('SELECT COUNT(*) as c FROM questions WHERE category_id = ?', [categoryId]);
   if (!total || total.c === 0) return false;
-  const played = get(
-    `SELECT COUNT(DISTINCT q.id) as c FROM questions q
-     JOIN responses r ON r.question_id = q.id
-     WHERE q.category_id = ?`,
-    [categoryId]
-  );
-  return played && played.c >= total.c;
+  const unplayed = get('SELECT COUNT(*) as c FROM questions WHERE category_id = ? AND played = 0', [categoryId]);
+  return !unplayed || unplayed.c === 0;
 }
 
 function areAllCategoriesPlayed(adminId) {
-  const total = get(
-    `SELECT COUNT(*) as c FROM questions q
-     JOIN categories c ON c.id = q.category_id
-     WHERE q.admin_id = ? AND c.unlocked = 1`,
-    [adminId]
-  );
+  const total = get('SELECT COUNT(*) as c FROM questions WHERE admin_id = ?', [adminId]);
   if (!total || total.c === 0) return false;
-  const played = get(
-    `SELECT COUNT(DISTINCT q.id) as c FROM questions q
-     JOIN categories c ON c.id = q.category_id
-     JOIN responses r ON r.question_id = q.id
-     WHERE q.admin_id = ? AND c.unlocked = 1`,
-    [adminId]
-  );
-  return played && played.c >= total.c;
+  const unplayed = get('SELECT COUNT(*) as c FROM questions WHERE admin_id = ? AND played = 0', [adminId]);
+  return !unplayed || unplayed.c === 0;
 }
 
 function getOverallLeaderboard(adminId, limit = 50) {

@@ -278,7 +278,7 @@ function renderGameCategories() {
     // Show questions for this category
     if (cat.unlocked) {
       catQuestions.forEach(q => {
-        const played = q.response_count > 0;
+        const played = q.played || q.response_count > 0;
         const isActive = gameState && gameState.current_question_id === q.id &&
           ['question_active', 'answers_visible'].includes(gameState.status);
         const qDiv = document.createElement('div');

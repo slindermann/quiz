@@ -154,14 +154,16 @@ module.exports = function setupSockets(io) {
       io.to(socket.quizCode).emit('question:answer-count', { questionId: submittedQId, count });
 
       // Auto-close question 1s after all players have answered
-      const playerCount = db.getPlayerCount(admin.id);
-      if (count >= playerCount) {
-        if (!global.autoCloseTimers) global.autoCloseTimers = {};
-        if (!global.autoCloseTimers[admin.id]) {
-          global.autoCloseTimers[admin.id] = setTimeout(() => {
-            delete global.autoCloseTimers[admin.id];
-            closeQuestion(admin.id, submittedQId, io, socket.quizCode);
-          }, 1000);
+      if (state.auto_close) {
+        const playerCount = db.getPlayerCount(admin.id);
+        if (count >= playerCount) {
+          if (!global.autoCloseTimers) global.autoCloseTimers = {};
+          if (!global.autoCloseTimers[admin.id]) {
+            global.autoCloseTimers[admin.id] = setTimeout(() => {
+              delete global.autoCloseTimers[admin.id];
+              closeQuestion(admin.id, submittedQId, io, socket.quizCode);
+            }, 1000);
+          }
         }
       }
     });

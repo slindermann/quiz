@@ -61,7 +61,10 @@ CREATE TABLE IF NOT EXISTS game_state (
   status TEXT NOT NULL DEFAULT 'idle',
   day INTEGER NOT NULL DEFAULT 1,
   language TEXT NOT NULL DEFAULT 'en',
-  answer_delay_seconds INTEGER NOT NULL DEFAULT 3
+  answer_delay_seconds INTEGER NOT NULL DEFAULT 3,
+  auto_close INTEGER NOT NULL DEFAULT 1,
+  auto_category_leaderboard INTEGER NOT NULL DEFAULT 1,
+  auto_finale INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS pending_registrations (

@@ -81,7 +81,13 @@ async function apiRaw(path, opts = {}) {
   document.getElementById('btnCloseQuestion').addEventListener('click', () => api('/close-question', { method: 'POST' }));
   document.getElementById('btnSeedExamples').addEventListener('click', seedExamples);
 
-  // Finale reveals
+  // Game setting toggles
+  ['AutoClose', 'AutoCategoryLeaderboard', 'AutoFinale'].forEach(name => {
+    const field = name === 'AutoClose' ? 'auto_close' : name === 'AutoCategoryLeaderboard' ? 'auto_category_leaderboard' : 'auto_finale';
+    document.getElementById(`toggle${name}`).addEventListener('change', (e) => {
+      api('/game-settings', { method: 'POST', body: { [field]: e.target.checked ? 1 : 0 } });
+    });
+  });
 
   // Content buttons
   document.getElementById('btnAddCategory').addEventListener('click', showAddCategoryModal);
@@ -195,6 +201,11 @@ async function finishLoadAdmin() {
   document.getElementById('settingQuizName').value = adminData.quiz_name;
   document.getElementById('settingLanguage').value = gameState.language || 'en';
   document.getElementById('settingDelay').value = gameState.answer_delay_seconds || 3;
+
+  // Game toggles
+  document.getElementById('toggleAutoClose').checked = gameState.auto_close !== 0;
+  document.getElementById('toggleAutoCategoryLeaderboard').checked = gameState.auto_category_leaderboard !== 0;
+  document.getElementById('toggleAutoFinale').checked = gameState.auto_finale !== 0;
 
   // Socket
   socket.emit('admin:join', { quiz_code: adminData.quiz_code });

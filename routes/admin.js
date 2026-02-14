@@ -470,22 +470,65 @@ function closeQuestion(adminId, questionId, io, room) {
     }
   }
 
-  // Auto-show category leaderboard if all questions in category are played
-  // BUT skip if this was the last category — don't spoil the finale
-  if (q && db.isCategoryFullyPlayed(q.category_id) && !db.areAllCategoriesPlayed(adminId)) {
-    const cat = db.getCategoryById(q.category_id);
-    setTimeout(() => {
-      const currentState2 = db.getGameState(adminId);
-      if (currentState2.status !== 'question_closed') return;
-      const leaderboard = db.getCategoryLeaderboard(adminId, q.category_id);
-      const categoryName = cat ? cat.name : 'Category';
-      db.updateGameState(adminId, { status: 'showing_leaderboard', current_question_id: null });
-      if (!global.activeLeaderboardContext) global.activeLeaderboardContext = {};
-      global.activeLeaderboardContext[adminId] = { categoryId: q.category_id, categoryName, overall: false };
-      io.to(room).emit('leaderboard:show', { leaderboard, categoryName, overall: false });
-      io.to(room).emit('game:state', { status: 'showing_leaderboard' });
-    }, 4000);
+  // Auto-actions after question close (based on game settings)
+  if (q) {
+    const allPlayed = db.areAllCategoriesPlayed(adminId);
+    const categoryDone = db.isCategoryFullyPlayed(q.category_id);
+
+    if (allPlayed && currentState.auto_finale) {
+      // All questions played + auto-finale enabled → start finale after delay
+      setTimeout(() => {
+        const s = db.getGameState(adminId);
+        if (s.status !== 'question_closed') return;
+        startFinaleSequence(adminId, io, room);
+      }, 4000);
+    } else if (categoryDone && currentState.auto_category_leaderboard) {
+      // Category done + auto-leaderboard enabled → show category leaderboard
+      const cat = db.getCategoryById(q.category_id);
+      setTimeout(() => {
+        const s = db.getGameState(adminId);
+        if (s.status !== 'question_closed') return;
+        const leaderboard = db.getCategoryLeaderboard(adminId, q.category_id);
+        const categoryName = cat ? cat.name : 'Category';
+        db.updateGameState(adminId, { status: 'showing_leaderboard', current_question_id: null });
+        if (!global.activeLeaderboardContext) global.activeLeaderboardContext = {};
+        global.activeLeaderboardContext[adminId] = { categoryId: q.category_id, categoryName, overall: false };
+        io.to(room).emit('leaderboard:show', { leaderboard, categoryName, overall: false });
+        io.to(room).emit('game:state', { status: 'showing_leaderboard' });
+      }, 4000);
+    }
   }
+}
+
+function startFinaleSequence(adminId, io, room) {
+  db.updateGameState(adminId, { status: 'finale', current_question_id: null });
+  const top3 = db.getTop3(adminId);
+  io.to(room).emit('game:state', { status: 'finale' });
+  io.to(room).emit('finale:start', { count: top3.length });
+
+  // Auto-reveal places 3 → 2 → 1 with delays
+  const places = [3, 2, 1].filter(p => p <= top3.length);
+  places.forEach((place, i) => {
+    setTimeout(() => {
+      const s = db.getGameState(adminId);
+      if (s.status !== 'finale') return;
+      const player = top3[place - 1];
+      io.to(room).emit('finale:reveal', { place, player });
+    }, (i + 1) * 4000);
+  });
+
+  // After all reveals, switch to overall leaderboard
+  const leaderboardDelay = (places.length + 1) * 4000 + 5000;
+  setTimeout(() => {
+    const s = db.getGameState(adminId);
+    if (s.status !== 'finale') return;
+    const leaderboard = db.getOverallLeaderboard(adminId);
+    db.updateGameState(adminId, { status: 'showing_leaderboard', current_question_id: null });
+    if (!global.activeLeaderboardContext) global.activeLeaderboardContext = {};
+    global.activeLeaderboardContext[adminId] = { overall: true };
+    io.to(room).emit('leaderboard:show', { leaderboard, overall: true });
+    io.to(room).emit('game:state', { status: 'showing_leaderboard' });
+  }, leaderboardDelay);
 }
 
 router.post('/close-question', (req, res) => {
@@ -521,6 +564,19 @@ router.post('/show-leaderboard', (req, res) => {
   res.json({ ok: true, leaderboard });
 });
 
+router.post('/game-settings', (req, res) => {
+  const allowed = ['auto_close', 'auto_category_leaderboard', 'auto_finale'];
+  const updates = {};
+  for (const key of allowed) {
+    if (req.body[key] !== undefined) {
+      updates[key] = req.body[key] ? 1 : 0;
+    }
+  }
+  if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No valid settings' });
+  db.updateGameState(req.admin.id, updates);
+  res.json({ ok: true });
+});
+
 router.post('/go-idle', (req, res) => {
   db.updateGameState(req.admin.id, { status: 'idle', current_question_id: null });
   const io = req.app.get('io');
@@ -529,38 +585,9 @@ router.post('/go-idle', (req, res) => {
 });
 
 router.post('/start-finale', (req, res) => {
-  db.updateGameState(req.admin.id, { status: 'finale', current_question_id: null });
-  const top3 = db.getTop3(req.admin.id);
   const io = req.app.get('io');
-  const room = req.admin.quiz_code;
-  const adminId = req.admin.id;
-  io.to(room).emit('game:state', { status: 'finale' });
-  io.to(room).emit('finale:start', { count: top3.length });
-
-  // Auto-reveal places 3 → 2 → 1 with delays
-  const places = [3, 2, 1].filter(p => p <= top3.length);
-  places.forEach((place, i) => {
-    setTimeout(() => {
-      const currentState = db.getGameState(adminId);
-      if (currentState.status !== 'finale') return;
-      const player = top3[place - 1];
-      io.to(room).emit('finale:reveal', { place, player });
-    }, (i + 1) * 4000); // 4s, 8s, 12s
-  });
-
-  // After all reveals, switch to overall leaderboard
-  const leaderboardDelay = (places.length + 1) * 4000 + 5000; // extra 5s on podium
-  setTimeout(() => {
-    const currentState = db.getGameState(adminId);
-    if (currentState.status !== 'finale') return;
-    const leaderboard = db.getOverallLeaderboard(adminId);
-    db.updateGameState(adminId, { status: 'showing_leaderboard', current_question_id: null });
-    if (!global.activeLeaderboardContext) global.activeLeaderboardContext = {};
-    global.activeLeaderboardContext[adminId] = { overall: true };
-    io.to(room).emit('leaderboard:show', { leaderboard, overall: true });
-    io.to(room).emit('game:state', { status: 'showing_leaderboard' });
-  }, leaderboardDelay);
-
+  startFinaleSequence(req.admin.id, io, req.admin.quiz_code);
+  const top3 = db.getTop3(req.admin.id);
   res.json({ ok: true, top3 });
 });
 

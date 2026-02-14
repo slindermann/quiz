@@ -215,6 +215,19 @@ select.form-control {
   padding-right: 36px;
 }
 
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  cursor: pointer;
+}
+
+.toggle-row + .toggle-row {
+  border-top: 1px solid var(--zs-gray-light);
+}
+
 .checkbox-label {
   display: flex;
   align-items: center;

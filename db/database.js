@@ -100,6 +100,16 @@ async function init() {
     // Column already exists — ignore
   }
 
+  // Migration: add auto-control columns to game_state if missing
+  for (const col of ['auto_close', 'auto_category_leaderboard', 'auto_finale']) {
+    try {
+      db.run(`ALTER TABLE game_state ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 1`);
+      persist();
+    } catch (e) {
+      // Column already exists — ignore
+    }
+  }
+
   // Create default admin if none exists
   const admin = get('SELECT id FROM admins LIMIT 1');
   if (!admin) {
@@ -381,7 +391,7 @@ function getGameState(adminId) {
   return get('SELECT * FROM game_state WHERE admin_id = ?', [adminId]);
 }
 
-const GAME_STATE_FIELDS = ['current_question_id', 'status', 'day', 'language', 'answer_delay_seconds'];
+const GAME_STATE_FIELDS = ['current_question_id', 'status', 'day', 'language', 'answer_delay_seconds', 'auto_close', 'auto_category_leaderboard', 'auto_finale'];
 function updateGameState(adminId, fields) {
   const sets = [];
   const vals = [];

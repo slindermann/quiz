@@ -269,18 +269,22 @@ function renderGameCategories() {
     if (cat.unlocked) {
       catQuestions.forEach(q => {
         const played = q.response_count > 0;
+        const isActive = gameState && gameState.current_question_id === q.id &&
+          ['question_active', 'answers_visible'].includes(gameState.status);
         const qDiv = document.createElement('div');
         qDiv.className = 'list-item';
+        qDiv.id = `gameQ${q.id}`;
         qDiv.style.marginLeft = '20px';
-        qDiv.style.borderLeft = played ? '3px solid var(--zs-green)' : '3px solid var(--zs-blue)';
-        if (played) qDiv.style.opacity = '0.6';
+        qDiv.style.borderLeft = isActive ? '3px solid var(--zs-orange, #FFB800)' : played ? '3px solid var(--zs-green)' : '3px solid var(--zs-blue)';
+        if (played && !isActive) qDiv.style.opacity = '0.6';
+        if (isActive) qDiv.style.background = 'rgba(255,184,0,0.08)';
         qDiv.innerHTML = `
           <div class="list-item-content">
-            <div class="list-item-title">${played ? '&#10003; ' : ''}${escapeHtml(q.question_text)}</div>
-            <div class="list-item-subtitle">${q.answers ? q.answers.length : 0} ${t('answerCount')}${played ? ' | &#10003; ' + t('played') + ' (' + q.response_count + ')' : ''}</div>
+            <div class="list-item-title">${isActive ? '&#9658; ' : played ? '&#10003; ' : ''}${escapeHtml(q.question_text)}</div>
+            <div class="list-item-subtitle">${q.answers ? q.answers.length : 0} ${t('answerCount')}${isActive ? ' | <span id="gameQCount${q.id}">0</span> ' + t('responses') : ''}${played && !isActive ? ' | &#10003; ' + t('played') + ' (' + q.response_count + ')' : ''}</div>
           </div>
           <div class="list-item-actions">
-            <button class="btn ${played ? 'btn-gray' : 'btn-primary'} btn-sm" onclick="startQuestion(${q.id})">${played ? t('replay') : t('startQuestion')}</button>
+            <button class="btn ${isActive ? 'btn-gray' : played ? 'btn-gray' : 'btn-primary'} btn-sm" onclick="startQuestion(${q.id})" ${isActive ? 'disabled' : ''}>${isActive ? t('active') : played ? t('replay') : t('startQuestion')}</button>
           </div>`;
         container.appendChild(qDiv);
       });
@@ -375,7 +379,9 @@ window.startQuestion = async function(id) {
   document.getElementById('liveAnswerCount').textContent = `0 ${t('answerCount')}`;
   document.getElementById('btnCloseQuestion').classList.remove('hidden');
   gameState.status = 'question_active';
+  gameState.current_question_id = id;
   updateGameUI();
+  renderGameCategories();
 };
 
 async function startFinale() {
@@ -756,6 +762,9 @@ socket.on('player:joined', (data) => {
 
 socket.on('question:answer-count', (data) => {
   document.getElementById('liveAnswerCount').textContent = `${data.count} ${t('answerCount')}`;
+  // Also update count in game categories list
+  const gameQCount = document.getElementById(`gameQCount${data.questionId}`);
+  if (gameQCount) gameQCount.textContent = data.count;
 });
 
 socket.on('question:tick', (data) => {
@@ -770,6 +779,7 @@ socket.on('question:closed', async (data) => {
   document.getElementById('liveQuestion').style.fontWeight = '';
   document.getElementById('btnCloseQuestion').classList.add('hidden');
   gameState.status = 'question_closed';
+  gameState.current_question_id = null;
   updateGameUI();
   await loadQuestions(); // Refresh for updated stats & played status
   renderGameCategories();

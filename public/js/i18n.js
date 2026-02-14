@@ -101,6 +101,8 @@ const I18N = {
     questionClosed: 'Question closed',
     played: 'played',
     replay: 'Replay',
+    active: 'Active',
+    responses: 'responses',
 
     // Admin management
     adminsTab: 'Admins',
@@ -252,6 +254,8 @@ const I18N = {
     questionClosed: 'Frage geschlossen',
     played: 'gespielt',
     replay: 'Nochmal',
+    active: 'Aktiv',
+    responses: 'Antworten',
 
     // Admin-Verwaltung
     adminsTab: 'Admins',

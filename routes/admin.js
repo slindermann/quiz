@@ -85,6 +85,7 @@ function requireAdmin(req, res, next) {
       const admin = db.getAdminById(session.adminId);
       if (admin) {
         req.admin = admin;
+        db.updateLastActive(admin.id);
         return next();
       }
     }
@@ -103,6 +104,7 @@ function requireAdmin(req, res, next) {
       const admin = db.getAdminByUsername(username);
       if (admin && bcrypt.compareSync(password, admin.password_hash)) {
         req.admin = admin;
+        db.updateLastActive(admin.id);
         return next();
       }
     }
@@ -618,6 +620,9 @@ router.post('/reveal-next', (req, res) => {
 });
 
 router.post('/reset-quiz', (req, res) => {
+  // Save round snapshot BEFORE deleting data (skip empty rounds)
+  db.saveQuizRound(req.admin.id);
+
   const oldCode = req.admin.quiz_code;
   const result = db.resetQuiz(req.admin.id);
 
@@ -766,6 +771,17 @@ router.get('/stats', (req, res) => {
   res.json({ playerCount, state, players });
 });
 
+// ─── Usage Statistics (superadmin) ──────────────────────────
+
+router.get('/usage-stats', requireSuperadmin, (req, res) => {
+  const stats = db.getUsageStats();
+  res.json(stats);
+});
+
+router.delete('/usage-stats', requireSuperadmin, (req, res) => {
+  db.clearUsageStats();
+  res.json({ ok: true });
+});
 
 // ─── Export ─────────────────────────────────────────────────
 

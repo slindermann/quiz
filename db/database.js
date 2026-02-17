@@ -108,6 +108,14 @@ async function init() {
     // Column already exists — ignore
   }
 
+  // Migration: add last_active_at column to admins if missing
+  try {
+    db.run("ALTER TABLE admins ADD COLUMN last_active_at DATETIME");
+    persist();
+  } catch (e) {
+    // Column already exists — ignore
+  }
+
   // Migration: add auto-control columns to game_state if missing
   for (const col of ['auto_close', 'auto_category_leaderboard', 'auto_finale', 'auto_advance']) {
     try {
@@ -117,6 +125,22 @@ async function init() {
       // Column already exists — ignore
     }
   }
+
+  // Migration: add quiz_rounds table
+  db.exec(`CREATE TABLE IF NOT EXISTS quiz_rounds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin_id INTEGER NOT NULL,
+    quiz_code TEXT NOT NULL,
+    quiz_name TEXT,
+    player_count INTEGER DEFAULT 0,
+    question_count INTEGER DEFAULT 0,
+    category_count INTEGER DEFAULT 0,
+    avg_score REAL DEFAULT 0,
+    started_at DATETIME,
+    ended_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (admin_id) REFERENCES admins(id) ON DELETE CASCADE
+  )`);
+  persist();
 
   // Clean up orphaned data (sql.js CASCADE unreliable)
   const orphanedQ = get('SELECT COUNT(*) as c FROM questions WHERE category_id NOT IN (SELECT id FROM categories)');
@@ -193,6 +217,10 @@ function updateAdminField(adminId, field, value) {
 
 function getAdminByQuizCode(code) {
   return get('SELECT * FROM admins WHERE quiz_code = ?', [code]);
+}
+
+function updateLastActive(adminId) {
+  run("UPDATE admins SET last_active_at = datetime('now') WHERE id = ?", [adminId]);
 }
 
 // ─── Category helpers ───────────────────────────────────────
@@ -717,12 +745,185 @@ function cleanExpiredRegistrations() {
   run("DELETE FROM pending_registrations WHERE created_at < datetime('now', '-10 minutes')");
 }
 
+// ─── Usage statistics helpers ────────────────────────────────
+
+function saveQuizRound(adminId) {
+  const admin = getAdminById(adminId);
+  if (!admin) return;
+
+  const playerCount = getPlayerCount(adminId);
+  const playedRow = get('SELECT COUNT(*) as c FROM questions WHERE admin_id = ? AND played = 1', [adminId]);
+  const questionCount = playedRow ? playedRow.c : 0;
+
+  // Skip saving empty rounds (no players and no played questions)
+  if (playerCount === 0 && questionCount === 0) return;
+
+  const catRow = get('SELECT COUNT(*) as c FROM categories WHERE admin_id = ?', [adminId]);
+  const categoryCount = catRow ? catRow.c : 0;
+
+  const avgRow = get(
+    `SELECT AVG(p.total_score) as avg_score FROM players p WHERE p.admin_id = ? AND p.total_score > 0`,
+    [adminId]
+  );
+  const avgScore = avgRow && avgRow.avg_score ? Math.round(avgRow.avg_score) : 0;
+
+  const startedRow = get(
+    `SELECT MIN(r.created_at) as started FROM responses r
+     JOIN players p ON r.player_id = p.id
+     WHERE p.admin_id = ?`,
+    [adminId]
+  );
+  const startedAt = startedRow ? startedRow.started : null;
+
+  // Use last response time as actual end time (not reset time which may be days later)
+  const endedRow = get(
+    `SELECT MAX(r.created_at) as ended FROM responses r
+     JOIN players p ON r.player_id = p.id
+     WHERE p.admin_id = ?`,
+    [adminId]
+  );
+  const endedAt = (endedRow && endedRow.ended) ? endedRow.ended : null;
+
+  run(
+    `INSERT INTO quiz_rounds (admin_id, quiz_code, quiz_name, player_count, question_count, category_count, avg_score, started_at, ended_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))`,
+    [adminId, admin.quiz_code, admin.quiz_name, playerCount, questionCount, categoryCount, avgScore, startedAt, endedAt]
+  );
+}
+
+function clearUsageStats() {
+  run('DELETE FROM quiz_rounds');
+}
+
+function getUsageStats() {
+  // --- Overview aggregates from history ---
+  const histOverview = get(`
+    SELECT COUNT(*) as totalRounds,
+           COALESCE(SUM(player_count), 0) as totalPlayers,
+           COALESCE(SUM(question_count), 0) as totalQuestions
+    FROM quiz_rounds
+  `);
+
+  // --- Per-admin aggregates from history ---
+  const adminHistory = all(`
+    SELECT a.id, a.username, a.last_active_at,
+           COUNT(qr.id) as historyRounds,
+           COALESCE(SUM(qr.player_count), 0) as historyPlayers,
+           COALESCE(SUM(qr.question_count), 0) as historyQuestions,
+           MAX(qr.ended_at) as lastEnded
+    FROM admins a
+    LEFT JOIN quiz_rounds qr ON qr.admin_id = a.id
+    GROUP BY a.id
+    ORDER BY historyRounds DESC
+  `);
+
+  // --- Live data per admin ---
+  const admins = [];
+  let liveActiveAdmins = 0;
+  let liveTotalPlayers = 0;
+  let liveTotalQuestions = 0;
+  let liveActiveRounds = 0;
+
+  for (const ah of adminHistory) {
+    const livePlayerCount = getPlayerCount(ah.id);
+    const playedRow = get('SELECT COUNT(*) as c FROM questions WHERE admin_id = ? AND played = 1', [ah.id]);
+    const liveQuestionsPlayed = playedRow ? playedRow.c : 0;
+    const totalQRow = get('SELECT COUNT(*) as c FROM questions WHERE admin_id = ?', [ah.id]);
+    const liveTotalQ = totalQRow ? totalQRow.c : 0;
+
+    const hasActiveRound = livePlayerCount > 0 || liveQuestionsPlayed > 0;
+    if (hasActiveRound) {
+      liveActiveAdmins++;
+      liveActiveRounds++;
+      liveTotalPlayers += livePlayerCount;
+      liveTotalQuestions += liveQuestionsPlayed;
+    }
+
+    // Determine online status from last_active_at (within 5 minutes = online)
+    let isOnline = false;
+    if (ah.last_active_at) {
+      const lastActiveTime = new Date(ah.last_active_at + 'Z').getTime();
+      isOnline = (Date.now() - lastActiveTime) < 5 * 60 * 1000;
+    }
+
+    // lastActive: 'now' if online, otherwise most recent of last_active_at or lastEnded
+    let lastActive;
+    if (isOnline) {
+      lastActive = 'now';
+    } else {
+      const candidates = [ah.last_active_at, ah.lastEnded].filter(Boolean);
+      lastActive = candidates.length > 0
+        ? candidates.sort((a, b) => new Date(b) - new Date(a))[0]
+        : null;
+    }
+
+    admins.push({
+      username: ah.username,
+      totalRounds: ah.historyRounds + (hasActiveRound ? 1 : 0),
+      totalPlayers: ah.historyPlayers + livePlayerCount,
+      totalQuestions: ah.historyQuestions + liveQuestionsPlayed,
+      currentRound: hasActiveRound
+        ? { players: livePlayerCount, questionsPlayed: liveQuestionsPlayed, questionsTotal: liveTotalQ }
+        : null,
+      lastActive
+    });
+  }
+
+  // Sort by totalRounds descending
+  admins.sort((a, b) => b.totalRounds - a.totalRounds);
+
+  // --- Round history (last 50) ---
+  const rounds = all(`
+    SELECT qr.ended_at as date, a.username as admin, qr.quiz_name as quizName,
+           qr.player_count as players, qr.question_count as questions,
+           qr.category_count as categories, qr.avg_score as avgScore,
+           qr.started_at, qr.ended_at
+    FROM quiz_rounds qr
+    JOIN admins a ON qr.admin_id = a.id
+    ORDER BY qr.ended_at DESC
+    LIMIT 50
+  `);
+
+  const roundsFormatted = rounds.map(r => {
+    let durationMinutes = null;
+    if (r.started_at && r.ended_at) {
+      const start = new Date(r.started_at).getTime();
+      const end = new Date(r.ended_at).getTime();
+      if (!isNaN(start) && !isNaN(end)) {
+        durationMinutes = Math.round((end - start) / 60000);
+      }
+    }
+    return {
+      date: r.date,
+      admin: r.admin,
+      quizName: r.quizName,
+      players: r.players,
+      questions: r.questions,
+      categories: r.categories,
+      avgScore: r.avgScore,
+      durationMinutes
+    };
+  });
+
+  return {
+    overview: {
+      totalRounds: (histOverview ? histOverview.totalRounds : 0) + liveActiveRounds,
+      totalPlayers: (histOverview ? histOverview.totalPlayers : 0) + liveTotalPlayers,
+      totalQuestions: (histOverview ? histOverview.totalQuestions : 0) + liveTotalQuestions,
+      activeAdmins: liveActiveAdmins
+    },
+    admins,
+    rounds: roundsFormatted
+  };
+}
+
 module.exports = {
   init,
   getDb,
   getAdminByUsername,
   getAdminById,
   updateAdminField,
+  updateLastActive,
   getAdminByQuizCode,
   getCategories,
   getCategoryById,
@@ -779,5 +980,8 @@ module.exports = {
   incrementRegistrationAttempts,
   deletePendingRegistration,
   setMustChangePassword,
-  cleanExpiredRegistrations
+  cleanExpiredRegistrations,
+  saveQuizRound,
+  getUsageStats,
+  clearUsageStats
 };

@@ -154,6 +154,28 @@ const I18N = {
     // Forced password change
     mustChangePassword: 'Change Password',
     mustChangePasswordHint: 'You must change your temporary password before continuing.',
+
+    // Statistics
+    statisticsTab: 'Statistics',
+    statTotalRounds: 'Total Rounds',
+    statTotalPlayers: 'Total Players',
+    statTotalQuestions: 'Questions Played',
+    statActiveAdmins: 'Active Admins',
+    statPerAdmin: 'Per-Admin Usage',
+    statRoundHistory: 'Round History',
+    statCurrentRound: 'Current Round',
+    statLastActive: 'Last Active',
+    statInactive: 'Inactive',
+    statNow: 'Now',
+    statDate: 'Date',
+    statAvgScore: 'Avg Score',
+    statDuration: 'Duration',
+    adminColumn: 'Admin',
+    noData: 'No data available',
+    noRoundHistory: 'No completed rounds yet.',
+    clearStats: 'Clear Statistics',
+    clearStatsConfirm: 'Delete all round history? This cannot be undone.',
+    clearStatsSuccess: 'Statistics cleared.',
   },
   de: {
     // Spieler
@@ -310,6 +332,28 @@ const I18N = {
     // Passwort-Änderung erzwungen
     mustChangePassword: 'Passwort ändern',
     mustChangePasswordHint: 'Du musst dein temporäres Passwort ändern, bevor du fortfahren kannst.',
+
+    // Statistiken
+    statisticsTab: 'Statistiken',
+    statTotalRounds: 'Runden gesamt',
+    statTotalPlayers: 'Spieler gesamt',
+    statTotalQuestions: 'Fragen gespielt',
+    statActiveAdmins: 'Aktive Admins',
+    statPerAdmin: 'Nutzung pro Admin',
+    statRoundHistory: 'Runden-Verlauf',
+    statCurrentRound: 'Aktuelle Runde',
+    statLastActive: 'Zuletzt aktiv',
+    statInactive: 'Inaktiv',
+    statNow: 'Jetzt',
+    statDate: 'Datum',
+    statAvgScore: 'Ø Punkte',
+    statDuration: 'Dauer',
+    adminColumn: 'Admin',
+    noData: 'Keine Daten vorhanden',
+    noRoundHistory: 'Noch keine abgeschlossenen Runden.',
+    clearStats: 'Statistiken löschen',
+    clearStatsConfirm: 'Gesamten Runden-Verlauf löschen? Dies kann nicht rückgängig gemacht werden.',
+    clearStatsSuccess: 'Statistiken gelöscht.',
   }
 };
 

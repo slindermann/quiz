@@ -68,8 +68,8 @@ async function apiRaw(path, opts = {}) {
       document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
-      // Load admins when switching to admins tab
       if (tab.dataset.tab === 'admins') loadAdmins();
+      if (tab.dataset.tab === 'statistics') loadStats();
     });
   });
 
@@ -111,6 +111,7 @@ async function apiRaw(path, opts = {}) {
 
   // Admin management (superadmin)
   document.getElementById('btnCreateAdmin').addEventListener('click', createNewAdmin);
+  document.getElementById('btnClearStats').addEventListener('click', clearStats);
 
   // Seed CSV management (superadmin)
   document.getElementById('btnDownloadSeedCSV').addEventListener('click', downloadSeedCSV);
@@ -189,12 +190,15 @@ async function finishLoadAdmin() {
 
   if (gameState.language) setLanguage(gameState.language);
 
-  // Show Admins tab only for superadmin
+  // Show Admins + Statistics tabs only for superadmin
   const adminsTab = document.getElementById('tabAdmins');
+  const statsTab = document.getElementById('tabStatistics');
   if (adminRole === 'superadmin') {
     adminsTab.classList.remove('hidden');
+    statsTab.classList.remove('hidden');
   } else {
     adminsTab.classList.add('hidden');
+    statsTab.classList.add('hidden');
   }
 
   // Settings
@@ -212,6 +216,12 @@ async function finishLoadAdmin() {
   socket.disconnect();
   socket.connect();
   socket.emit('admin:join', { quiz_code: adminData.quiz_code });
+
+  // Heartbeat every 2 minutes so server tracks admin as active
+  if (window._adminHeartbeat) clearInterval(window._adminHeartbeat);
+  window._adminHeartbeat = setInterval(() => {
+    if (socket.connected) socket.emit('admin:heartbeat');
+  }, 2 * 60 * 1000);
 
   loadLogoPreview();
   generateQR();
@@ -988,6 +998,113 @@ async function forceChangePassword() {
   } catch (e) {
     errorEl.textContent = e.message || 'Error';
   }
+}
+
+// ─── Usage Statistics (superadmin) ─────────────────────────────
+
+async function loadStats() {
+  try {
+    const stats = await api('/usage-stats');
+
+    // Overview cards
+    document.getElementById('statTotalRounds').textContent = stats.overview.totalRounds;
+    document.getElementById('statTotalPlayers').textContent = stats.overview.totalPlayers;
+    document.getElementById('statTotalQuestions').textContent = stats.overview.totalQuestions;
+    document.getElementById('statActiveAdmins').textContent = stats.overview.activeAdmins;
+
+    // Per-admin table
+    const adminContainer = document.getElementById('statsAdminTable');
+    if (stats.admins.length === 0) {
+      adminContainer.innerHTML = `<p class="text-muted text-sm">${t('noData')}</p>`;
+    } else {
+      const table = document.createElement('table');
+      table.style.cssText = 'width:100%;border-collapse:collapse;font-size:14px';
+      table.innerHTML = `
+        <thead>
+          <tr style="border-bottom:2px solid #e2e8f0;text-align:left">
+            <th style="padding:8px">${t('adminColumn')}</th>
+            <th style="padding:8px">${t('statTotalRounds')}</th>
+            <th style="padding:8px">${t('statTotalPlayers')}</th>
+            <th style="padding:8px">${t('statTotalQuestions')}</th>
+            <th style="padding:8px">${t('statCurrentRound')}</th>
+            <th style="padding:8px">${t('statLastActive')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${stats.admins.map(a => `
+            <tr style="border-bottom:1px solid #e2e8f0">
+              <td style="padding:8px">${escapeHtml(a.username)}</td>
+              <td style="padding:8px">${a.totalRounds}</td>
+              <td style="padding:8px">${a.totalPlayers}</td>
+              <td style="padding:8px">${a.totalQuestions}</td>
+              <td style="padding:8px">${a.currentRound
+                ? `${a.currentRound.players} ${t('players')}, ${a.currentRound.questionsPlayed}/${a.currentRound.questionsTotal} ${t('questions')}`
+                : `<span class="text-muted">${t('statInactive')}</span>`}</td>
+              <td style="padding:8px">${a.lastActive === 'now'
+                ? `<span style="color:var(--zs-green);font-weight:600">${t('statNow')}</span>`
+                : (a.lastActive ? formatDate(a.lastActive) : '—')}</td>
+            </tr>
+          `).join('')}
+        </tbody>`;
+      adminContainer.innerHTML = '';
+      adminContainer.appendChild(table);
+    }
+
+    // Round history table
+    const roundContainer = document.getElementById('statsRoundTable');
+    if (stats.rounds.length === 0) {
+      roundContainer.innerHTML = `<p class="text-muted text-sm">${t('noRoundHistory')}</p>`;
+    } else {
+      const table = document.createElement('table');
+      table.style.cssText = 'width:100%;border-collapse:collapse;font-size:14px';
+      table.innerHTML = `
+        <thead>
+          <tr style="border-bottom:2px solid #e2e8f0;text-align:left">
+            <th style="padding:8px">${t('statDate')}</th>
+            <th style="padding:8px">${t('adminColumn')}</th>
+            <th style="padding:8px">${t('quizName')}</th>
+            <th style="padding:8px">${t('players')}</th>
+            <th style="padding:8px">${t('questions')}</th>
+            <th style="padding:8px">${t('statAvgScore')}</th>
+            <th style="padding:8px">${t('statDuration')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${stats.rounds.map(r => `
+            <tr style="border-bottom:1px solid #e2e8f0">
+              <td style="padding:8px">${formatDate(r.date)}</td>
+              <td style="padding:8px">${escapeHtml(r.admin)}</td>
+              <td style="padding:8px">${escapeHtml(r.quizName || '—')}</td>
+              <td style="padding:8px">${r.players}</td>
+              <td style="padding:8px">${r.questions}</td>
+              <td style="padding:8px">${r.avgScore ? Math.round(r.avgScore).toLocaleString() : '—'}</td>
+              <td style="padding:8px">${r.durationMinutes != null ? r.durationMinutes + ' min' : '—'}</td>
+            </tr>
+          `).join('')}
+        </tbody>`;
+      roundContainer.innerHTML = '';
+      roundContainer.appendChild(table);
+    }
+  } catch (e) {
+    // Not superadmin or error
+  }
+}
+
+async function clearStats() {
+  if (!confirm(t('clearStatsConfirm'))) return;
+  try {
+    const res = await api('/usage-stats', { method: 'DELETE' });
+    if (res.ok) await loadStats();
+  } catch (e) {
+    console.error('clearStats failed:', e);
+  }
+}
+
+function formatDate(isoStr) {
+  if (!isoStr) return '—';
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return isoStr;
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 // ─── Helpers ──────────────────────────────────────────────────

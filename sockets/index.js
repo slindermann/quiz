@@ -84,6 +84,20 @@ module.exports = function setupSockets(io) {
       socket.quizCode = code;
       socket.isAdmin = true;
       socket.adminId = admin.id;
+      db.updateLastActive(admin.id);
+    });
+
+    // ─── Admin heartbeat (activity tracking) ───────────────
+
+    socket.on('admin:heartbeat', () => {
+      if (!socket.isAdmin || !socket.adminId) return;
+
+      // Re-validate session is still valid
+      const cookies = cookie.parse(socket.handshake.headers.cookie || '');
+      const session = getSession(cookies.admin_session);
+      if (session && session.adminId === socket.adminId) {
+        db.updateLastActive(socket.adminId);
+      }
     });
 
     // ─── Submit answer ────────────────────────────────────

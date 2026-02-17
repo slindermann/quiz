@@ -64,6 +64,26 @@ idle → question_active → answers_visible → question_closed → [showing_le
 - Leaderboard context: `global.activeLeaderboardContext[adminId]` tracks category vs overall
 - Scoring: Base 1000 pts + up to 500 speed bonus (time-based)
 - Multi-correct: Multiple answers can have `is_correct=1`; any one correct = full points
+- Questions support 2–6 answer options (A through F)
+- Answer delay: configurable seconds (0–30, default 3) before options appear after question text
+- Categories can be locked/unlocked — locked categories are hidden from players
+- CSV results export available during/after finale
+
+### Socket.IO Events
+
+Client → Server:
+- `quiz:join` — Player joins quiz room (rate limited: 10/min)
+- `admin:join` — Admin joins with session cookie validation
+- `answer:submit` — Player submits answer (rate limited: 30/min)
+
+Server → Client (to room):
+- `game:state` — Full game state sync (camelCase fields: `status`, `currentQuestionId`, `day`, `language`)
+- `player:count` / `player:joined` — Player roster updates
+- `question:show` → `question:answers-visible` → `question:tick` → `question:closed` — Question lifecycle
+- `question:answer-count` — Live answer count during active question
+- `leaderboard:show` — Category or overall leaderboard
+- `finale:start` → `finale:reveal` (×3) — Finale podium reveals (3rd → 2nd → 1st)
+- `answer:ack` / `answer:error` — Answer submission feedback
 
 ## Authentication
 
@@ -107,23 +127,21 @@ idle → question_active → answers_visible → question_closed → [showing_le
 
 - Env vars for SMTP: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `REGISTRATION_DOMAIN` (default: `zscaler.com`)
 - DB functions go in `db/database.js` and are exported in `module.exports`
-- Socket events use namespaced format: `game:state`, `question:show`, `leaderboard:show`
+- Socket events use namespaced format: `game:state`, `question:show`, `leaderboard:show` (see full list above)
 - All leaderboard queries include 0-point players (sorted by score DESC, name ASC)
 - All UI strings use i18n: `data-i18n` attributes in HTML, `t('key')` in JS
-- SQL injection prevention: Column allowlists (`ADMIN_FIELDS`, `CATEGORY_FIELDS`, etc.) on all update functions
-- CSV export: `csvSafe()` prevents formula injection
-- File upload: MIME type + extension allowlist for logo, per-admin filenames (`logo-{adminId}.ext`)
 - Legal pages: `/impressum.html` and `/datenschutz.html` with footer links on player + admin pages
 
 ## Security
 
 - **Helmet**: CSP, X-Frame-Options, X-Content-Type-Options, etc.
 - **CORS**: Socket.IO restricted via `ALLOWED_ORIGINS` env var (comma-separated)
+- **SQL injection**: Column allowlists (`ADMIN_FIELDS`, `CATEGORY_FIELDS`, `QUESTION_FIELDS`, `ANSWER_FIELDS`) on all update functions
+- **CSV formula injection**: `csvSafe()` prefixes trigger characters in exports
 - **Player auth**: Cookie-only (`quiz_token`), no tokens in URLs/query params
 - **Socket rate limiting**: Per-socket limits on `quiz:join` (10/min), `answer:submit` (30/min)
 - **Cross-quiz isolation**: Socket validates player belongs to the quiz before accepting answers
-- **SQL injection**: Column allowlists (`ADMIN_FIELDS`, `CATEGORY_FIELDS`, etc.) on all update functions
-- **CSV formula injection**: `csvSafe()` prefixes trigger characters
+- **File upload**: MIME type + extension allowlist for logo
 - **Body size limit**: `express.json({ limit: '100kb' })`
 
 ## Mobile / Reconnection Stability

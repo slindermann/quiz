@@ -77,40 +77,56 @@ function copySuperadminLogo(targetAdminId) {
 // ─── Auth middleware ────────────────────────────────────────
 
 function requireAdmin(req, res, next) {
+  let admin = null;
+
   // Check session cookie first (H4)
   const sessionToken = req.cookies && req.cookies.admin_session;
   if (sessionToken) {
     const session = getSession(sessionToken);
     if (session) {
-      const admin = db.getAdminById(session.adminId);
-      if (admin) {
-        req.admin = admin;
-        db.updateLastActive(admin.id);
-        return next();
+      admin = db.getAdminById(session.adminId);
+      if (!admin) {
+        res.clearCookie('admin_session', { path: '/' });
       }
+    } else {
+      res.clearCookie('admin_session', { path: '/' });
     }
-    res.clearCookie('admin_session', { path: '/' });
   }
 
   // Fallback to Basic Auth (for API/testing)
-  const auth = req.headers.authorization;
-  if (auth && auth.startsWith('Basic ')) {
-    const decoded = Buffer.from(auth.split(' ')[1], 'base64').toString();
-    // L6: Handle colons in password
-    const idx = decoded.indexOf(':');
-    if (idx > 0) {
-      const username = decoded.substring(0, idx);
-      const password = decoded.substring(idx + 1);
-      const admin = db.getAdminByUsername(username);
-      if (admin && bcrypt.compareSync(password, admin.password_hash)) {
-        req.admin = admin;
-        db.updateLastActive(admin.id);
-        return next();
+  if (!admin) {
+    const auth = req.headers.authorization;
+    if (auth && auth.startsWith('Basic ')) {
+      const decoded = Buffer.from(auth.split(' ')[1], 'base64').toString();
+      // L6: Handle colons in password
+      const idx = decoded.indexOf(':');
+      if (idx > 0) {
+        const username = decoded.substring(0, idx);
+        const password = decoded.substring(idx + 1);
+        const found = db.getAdminByUsername(username);
+        if (found && bcrypt.compareSync(password, found.password_hash)) {
+          admin = found;
+        }
       }
     }
   }
 
-  return res.status(401).json({ error: 'Authentication required' });
+  if (!admin) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  req.admin = admin;
+  db.updateLastActive(admin.id);
+
+  // Server-side enforcement: must_change_password blocks all routes except password change and logout
+  if (admin.must_change_password) {
+    const allowed = ['/change-password', '/logout'];
+    if (!allowed.includes(req.path)) {
+      return res.status(403).json({ error: 'Password change required', must_change_password: true });
+    }
+  }
+
+  next();
 }
 
 function requireSuperadmin(req, res, next) {

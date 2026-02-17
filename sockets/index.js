@@ -23,7 +23,7 @@ module.exports = function setupSockets(io) {
 
     // ─── Join quiz room ───────────────────────────────────
 
-    socket.on('quiz:join', ({ quiz_code, playerToken }) => {
+    socket.on('quiz:join', ({ quiz_code }) => {
       if (!quiz_code) return;
       if (!rateLimit(socket, 'quiz:join', 10)) return;
 
@@ -31,7 +31,9 @@ module.exports = function setupSockets(io) {
       socket.join(code);
       socket.quizCode = code;
 
-      // Identify the player and verify they belong to this quiz
+      // Identify player via httpOnly cookie (not payload)
+      const cookies = cookie.parse(socket.handshake.headers.cookie || '');
+      const playerToken = cookies.quiz_token;
       if (playerToken) {
         const player = db.getPlayerByToken(playerToken);
         const admin = db.getAdminByQuizCode(code);

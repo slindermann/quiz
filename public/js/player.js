@@ -10,25 +10,12 @@ const socket = io({
 let quizCode = null;
 let playerId = null;
 let playerName = '';
-let playerToken = null;
 let totalScore = 0;
 let currentQuestionId = null;
 let hasAnswered = false;
 let timerTotal = 15;
 let isConnected = false;
 let hasJoinedQuiz = false;
-
-// ─── Token management ─────────────────────────────────────────
-
-function saveToken(token) {
-  playerToken = token;
-  try { localStorage.setItem('quiz_token', token); } catch (e) { /* ignore */ }
-}
-
-function getToken() {
-  if (playerToken) return playerToken;
-  try { return localStorage.getItem('quiz_token'); } catch (e) { return null; }
-}
 
 // ─── Connection status UI ────────────────────────────────────
 
@@ -84,10 +71,7 @@ socket.on('reconnect_attempt', () => {
 });
 
 function rejoinAndSync() {
-  socket.emit('quiz:join', {
-    quiz_code: quizCode,
-    playerToken: getToken()
-  });
+  socket.emit('quiz:join', { quiz_code: quizCode });
   // Always fetch full state from REST API on reconnect
   fetch(`/api/state?quiz_code=${quizCode}`)
     .then(r => r.json())
@@ -179,7 +163,6 @@ function initWithCode(code) {
       if (data.player && data.quiz_code === quizCode) {
         playerId = data.player.id;
         playerName = data.player.name;
-        playerToken = data.token;
         totalScore = data.player.total_score || 0;
         enterQuiz();
       }
@@ -228,7 +211,6 @@ function joinQuiz() {
       }
       playerId = data.player.id;
       playerName = data.player.name;
-      saveToken(data.token);
       enterQuiz();
     })
     .catch(err => {
@@ -243,11 +225,10 @@ function enterQuiz() {
   document.getElementById('quizScreen').classList.remove('hidden');
   document.getElementById('quizSubtitle').textContent = playerName;
 
-  // Connect socket with token for player identification
-  socket.emit('quiz:join', {
-    quiz_code: quizCode,
-    playerToken: getToken()
-  });
+  // Reconnect socket so handshake picks up the quiz_token cookie
+  socket.disconnect();
+  socket.connect();
+  // quiz:join will be emitted on 'connect' event via rejoinAndSync()
 
   // Get current state
   fetch(`/api/state?quiz_code=${quizCode}`)

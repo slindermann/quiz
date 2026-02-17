@@ -28,14 +28,13 @@ router.post('/join', joinLimiter, (req, res) => {
     return res.status(404).json({ error: 'Quiz not found' });
   }
 
-  // Check if already joined (by cookie or token in body)
-  const existingToken = req.cookies.quiz_token || req.body.token;
+  // Check if already joined (by httpOnly cookie only)
+  const existingToken = req.cookies.quiz_token;
   if (existingToken) {
     const existing = db.getPlayerByToken(existingToken);
     if (existing && existing.admin_id === admin.id) {
       return res.json({
         player: { id: existing.id, name: existing.name },
-        token: existingToken,
         quiz_code: admin.quiz_code,
         quiz_name: admin.quiz_name
       });
@@ -61,7 +60,6 @@ router.post('/join', joinLimiter, (req, res) => {
 
   res.json({
     player: { id: playerId, name: name.trim() },
-    token,
     quiz_code: admin.quiz_code,
     quiz_name: admin.quiz_name
   });
@@ -79,7 +77,6 @@ router.get('/me', (req, res) => {
   const admin = db.getAdminById(player.admin_id);
   res.json({
     player: { id: player.id, name: player.name, total_score: player.total_score },
-    token,
     quiz_code: admin.quiz_code,
     quiz_name: admin.quiz_name
   });

@@ -49,14 +49,14 @@ router.post('/register/request-code', registerLimiter, async (req, res) => {
     return res.status(400).json({ error: `Only @${ALLOWED_DOMAIN} email addresses are allowed` });
   }
 
-  // Check if admin already exists with this email
-  const existing = db.getAdminByUsername(normalizedEmail);
-  if (existing) {
-    return res.status(409).json({ error: 'An account with this email already exists' });
-  }
-
   // Clean up expired registrations
   db.cleanExpiredRegistrations();
+
+  // Check if admin already exists — return same response to prevent user enumeration
+  const existing = db.getAdminByUsername(normalizedEmail);
+  if (existing) {
+    return res.json({ ok: true });
+  }
 
   // Generate 6-digit code
   const code = String(crypto.randomInt(100000, 999999));

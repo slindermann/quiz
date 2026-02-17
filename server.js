@@ -13,6 +13,7 @@ async function start() {
   await db.init();
 
   const app = express();
+  app.set('trust proxy', 1); // Trust first proxy (Caddy) for correct client IP in rate limiters
   const server = http.createServer(app);
 
   const allowedOrigins = process.env.ALLOWED_ORIGINS

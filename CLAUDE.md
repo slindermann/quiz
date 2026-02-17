@@ -74,6 +74,7 @@ idle → question_active → answers_visible → question_closed → [showing_le
 Client → Server:
 - `quiz:join` — Player joins quiz room (rate limited: 10/min)
 - `admin:join` — Admin joins with session cookie validation
+- `admin:heartbeat` — Admin activity ping (every 2 min, updates `last_active_at`)
 - `answer:submit` — Player submits answer (rate limited: 30/min)
 
 Server → Client (to room):
@@ -94,9 +95,9 @@ Server → Client (to room):
 
 ### Roles
 
-- **Superadmin**: Can create/delete admins (Admins tab), manage seed questions (CSV download/upload/reset). First admin from `.env` is auto-promoted.
+- **Superadmin**: Can create/delete admins (Admins tab), manage seed questions (CSV download/upload/reset), view/clear usage statistics (Statistics tab). First admin from `.env` is auto-promoted.
 - **Admin**: Can only manage own quiz + change password.
-- Middleware: `requireAdmin` (all admin routes), `requireSuperadmin` (admin management + seed CSV)
+- Middleware: `requireAdmin` (all admin routes, also updates `last_active_at`), `requireSuperadmin` (admin management + seed CSV + statistics)
 
 ### Self-Registration
 
@@ -122,6 +123,18 @@ Server → Client (to room):
 - Quiz reset replaces logo with superadmin default
 - `/api/favicon` serves superadmin logo as favicon for all pages
 - Logo displayed on presenter waiting screen, player waiting card, and registration page
+
+### Usage Statistics & Activity Tracking
+
+- **Statistics tab** (superadmin only): Overview cards, per-admin table, round history
+- **Activity tracking**: `admins.last_active_at` column updated from 3 sources:
+  1. `requireAdmin` middleware (every HTTP request)
+  2. `admin:join` socket event (connect/reconnect)
+  3. `admin:heartbeat` socket event (every 2 min while page is open)
+- **Online status**: Admin is "Now" if `last_active_at` within 5 minutes, otherwise shows timestamp
+- **Round history**: `quiz_rounds` table, snapshots saved on quiz reset via `saveQuizRound()`
+- **Round duration**: Based on first→last response time (not reset time)
+- **Clear statistics**: `DELETE /admin/api/usage-stats` (superadmin) deletes all `quiz_rounds`
 
 ## Conventions
 
